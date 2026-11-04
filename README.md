@@ -17,6 +17,10 @@ npm run build
 
 Runs fully offline – no external services. Data is stored locally (IndexedDB).
 
+### Deployment (GitHub Pages)
+
+Every push to `main` runs `.github/workflows/deploy-pages.yml`: install, typecheck, unit tests, build, and deploy `dist/` to GitHub Pages. The build uses relative asset paths and hash routing, so it works at `https://<owner>.github.io/hydraulic-academy/` without configuration. One-time setup: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+
 ## What’s in it
 
 | Section | What the technician does |

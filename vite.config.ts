@@ -4,6 +4,8 @@ import react from '@vitejs/plugin-react';
 import { fileURLToPath, URL } from 'node:url';
 
 export default defineConfig({
+  // Relative asset paths: the app uses hash routing, so it works from any sub-path (e.g. GitHub Pages /hydraulic-academy/).
+  base: './',
   plugins: [react()],
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   css: { modules: { localsConvention: 'camelCaseOnly' } },
