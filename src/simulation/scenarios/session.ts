@@ -30,7 +30,7 @@ export interface ConfirmedFailure {
 }
 
 /** Events that represent unsafe technician actions. */
-export const SAFETY_VIOLATION_CODES = ['opened-under-pressure', 'unsupported-load', 'start-pto-on', 'gauge-overrange', 'unsafe-leak-check', 'skipped-loto'];
+export const SAFETY_VIOLATION_CODES = ['opened-under-pressure', 'unsupported-load', 'start-pto-on', 'gauge-overrange', 'unsafe-leak-check', 'skipped-loto', 'unsafe-adjust'];
 
 export function createScenarioMachine(def: MachineDefinition, s: DiagnosticScenario, seed?: number): MachineSimulation {
   const { brief, key } = s;

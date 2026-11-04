@@ -58,11 +58,14 @@ class Topology {
   /** Roles reachable from a port through inline components (filters, coolers, meters...). */
   reach(k: string, seen = new Set<string>()): PortInfo[] {
     const out: PortInfo[] = [];
-    for (const p of this.net(k)) {
+    const net = this.net(k);
+    // A reservoir port fixes the net at tank pressure: do not propagate through inline parts beyond it.
+    const atTank = [this.ports.get(k), ...net].some((p) => p && ['return-in', 'drain-in', 'suction-out'].includes(p.def.role));
+    for (const p of net) {
       const pk = key(p.ref);
       if (seen.has(pk)) continue;
       seen.add(pk);
-      if (INLINE_TYPES.has(p.compType)) {
+      if (INLINE_TYPES.has(p.compType) && !atTank) {
         const other = [...this.ports.values()].find((x) => x.ref.component === p.ref.component && x.ref.port !== p.ref.port);
         if (other) {
           seen.add(key(other.ref));
@@ -129,7 +132,7 @@ export function validateCircuit(c: CircuitDefinition): ValidationIssue[] {
           push({ severity: p.compType === 'relief-valve' ? 'warning' : 'error', code: 'supply-open', message: `${desc(p)} is not connected.`, why: 'The pressure inlet must be supplied.', consequence: p.compType === 'relief-valve' ? 'Relief valve provides no protection.' : 'Valve receives no flow.', fix: 'Connect to the pump pressure line.', ports: [p.ref] });
           break;
         }
-        if (!has(reach, ['pump-outlet']) && has(reach, ['tank', 'return-in', 'drain-in'])) push({ severity: 'danger', code: 'supply-on-return', message: `${desc(p)} (pressure inlet) is connected to a return/tank line.`, why: 'P and T ports have been reversed.', consequence: p.compType === 'relief-valve' ? 'The relief valve now sits on the return line – the pump has NO overpressure protection.' : 'Spool functions are reversed and the relief path may be bypassed.', fix: 'Swap the hoses so pump pressure feeds the port marked P and the return goes from T.', ports: [p.ref], connections: conns });
+        if (!has(reach, ['pump-outlet']) && has(reach, ['tank', 'return-in', 'drain-in', 'suction-out'])) push({ severity: 'danger', code: 'supply-on-return', message: `${desc(p)} (pressure inlet) is connected to a return/tank line.`, why: 'P and T ports have been reversed.', consequence: p.compType === 'relief-valve' ? 'The relief valve now sits on the return line – the pump has NO overpressure protection.' : 'Spool functions are reversed and the relief path may be bypassed.', fix: 'Swap the hoses so pump pressure feeds the port marked P and the return goes from T.', ports: [p.ref], connections: conns });
         break;
       }
       case 'tank': {
@@ -238,5 +241,48 @@ export function compareToReference(actual: CircuitDefinition, reference: Circuit
     if (out.some((d) => d.actual === cn)) continue;
     out.push({ severity: 'warning', code: 'extra', message: `Connection not on the schematic: ${key(cn.from)} → ${key(cn.to)}.`, actual: cn });
   }
+  return out;
+}
+
+export interface NetDiff {
+  kind: 'missing-join' | 'wrong-join';
+  ports: string[];
+  message: string;
+}
+
+/**
+ * Compare circuits by their nets (which ports are hydraulically joined),
+ * so equivalent tee positions are accepted. Used for circuit-building
+ * exercises where hose routing order does not matter.
+ */
+export function compareNets(actual: CircuitDefinition, reference: CircuitDefinition): NetDiff[] {
+  const nets = (c: CircuitDefinition) => {
+    const parent = new Map<string, string>();
+    const find = (k: string): string => {
+      if (!parent.has(k)) parent.set(k, k);
+      let p = parent.get(k)!;
+      while (p !== parent.get(p)) p = parent.get(p)!;
+      return p;
+    };
+    for (const cn of c.connections) {
+      const a = find(key(cn.from));
+      const b = find(key(cn.to));
+      if (a !== b) parent.set(a, b);
+    }
+    const groups = new Map<string, string[]>();
+    for (const k of parent.keys()) {
+      const r = find(k);
+      groups.set(r, [...(groups.get(r) ?? []), k]);
+    }
+    return [...groups.values()].filter((g) => g.length > 1).map((g) => g.sort());
+  };
+  const A = nets(actual);
+  const R = nets(reference);
+  const sig = (g: string[]) => g.join('|');
+  const aSet = new Set(A.map(sig));
+  const rSet = new Set(R.map(sig));
+  const out: NetDiff[] = [];
+  for (const g of R) if (!aSet.has(sig(g))) out.push({ kind: 'missing-join', ports: g, message: `These ports must be joined in one line: ${g.join(', ')}.` });
+  for (const g of A) if (!rSet.has(sig(g))) out.push({ kind: 'wrong-join', ports: g, message: `These ports are joined but should not be (as a group): ${g.join(', ')}.` });
   return out;
 }
