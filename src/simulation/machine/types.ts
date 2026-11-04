@@ -29,6 +29,8 @@ export interface ElectricalCircuitConfig {
   id: string;
   label: string;
   device: ElectricalDevice;
+  /** Operator function that energises this solenoid (dcv solenoids). */
+  function?: string;
   /** Hydraulic component the device acts on (for dcv solenoids). */
   target?: string;
   coilResistance: number;
@@ -57,7 +59,65 @@ export interface DumpBodyMechanismConfig {
   length: number;
 }
 
-export type MechanismConfig = DumpBodyMechanismConfig;
+/**
+ * Telescopic knuckle-less service crane. Boom plane geometry is relative to
+ * the boom pivot P (x outward along the boom at 0°, y up). The crane base
+ * sits on the truck; slew rotates the whole boom plane about a vertical axis.
+ */
+export interface CraneMechanismConfig {
+  type: 'crane';
+  id: string;
+  label: string;
+  liftCylinder: string;
+  extendCylinder: string;
+  winchMotor: string;
+  slewMotor: string;
+  outriggerCylinder: string;
+  /** Lift cylinder base relative to the boom pivot (m). */
+  liftBase: [number, number];
+  /** Lift cylinder attach point on the boom, boom frame (m). */
+  liftAttach: [number, number];
+  /** Boom pivot height above ground (m). */
+  pivotHeight: number;
+  minAngle: number;
+  maxAngle: number;
+  /** Retracted boom length, pivot to sheave (m). */
+  boomLength: number;
+  boomMass: number;
+  /** Mass of the extending section (m). */
+  extensionMass: number;
+  winchGearRatio: number;
+  drumRadius: number;
+  /** Cable paid out when the hook is at ground level with the boom stowed (m). */
+  maxCable: number;
+  slewGearRatio: number;
+  slewFrictionTorque: number;
+  /** Rated load moment with stabilizer set (N·m). */
+  ratedMoment: number;
+  /** Maximum winch line load (kg). */
+  maxLoad: number;
+  /** Anti-two-block switch distance (m). */
+  a2bDistance: number;
+  outriggerContact: number;
+  outriggerStiffness: number;
+  /** Share of truck weight carried by the stabilizer leg when set (N). */
+  outriggerShare: number;
+}
+
+export type MechanismConfig = DumpBodyMechanismConfig | CraneMechanismConfig;
+
+/** An operator function: a control that commands one directional valve. */
+export interface MachineFunction {
+  id: string;
+  label: string;
+  valve: string;
+  actuation: 'solenoid' | 'lever';
+  positive: string;
+  negative: string;
+  /** Actuator moved by this function, and the readout that indicates movement. */
+  actuator: string;
+  movementKey: 'velocity' | 'speed';
+}
 
 export interface TestPointConfig {
   id: string;
@@ -80,8 +140,8 @@ export interface MachineDefinition {
   electrical: ElectricalCircuitConfig[];
   mechanisms: MechanismConfig[];
   testPoints: TestPointConfig[];
-  /** Directional valve operated by the hoist control. */
-  hoistValve: string;
+  /** Operator functions (first is the primary function). */
+  functions: MachineFunction[];
   /** Relief valve protecting the hoist circuit. */
   mainRelief: string;
   /** Pressure connection used to install an in-line flow tester. */

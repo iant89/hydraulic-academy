@@ -7,7 +7,7 @@ import type { EquipmentProfile } from '@/equipment/shared/types';
 import { machineFromProfile } from '@/equipment/registry';
 import { BUILTIN_PROFILES } from '@/data/equipment/profiles';
 import type { FaultSpec } from '@/simulation/failures/faults';
-import { DUMP_TRUCK_ID } from '@/equipment/dump-truck/definition';
+import { SCENARIO_PROFILE } from '@/data/scenarios';
 
 /**
  * The single live equipment runtime shared by the Equipment Simulator,
@@ -53,8 +53,6 @@ interface WorkbayState {
   injectFault(f: FaultSpec): void;
   clearPracticeFaults(): void;
 }
-
-const SCENARIO_PROFILE: Record<string, string> = { [DUMP_TRUCK_ID]: 'generic-dt-15' };
 
 const fresh = (p: EquipmentProfile, faults: FaultSpec[] = []) => new MachineSimulation(machineFromProfile(p), { seed: 11, faults: structuredClone(faults), initialTemperature: 25 });
 

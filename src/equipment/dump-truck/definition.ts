@@ -27,13 +27,13 @@ export function dumpTruckDefinition(): MachineDefinition {
       requiresParkingBrake: true,
     },
     pump: 'pump',
-    hoistValve: 'dcv',
+    functions: [{ id: 'hoist', label: 'Hoist', valve: 'dcv', actuation: 'solenoid', positive: 'RAISE', negative: 'LOWER', actuator: 'cyl', movementKey: 'velocity' }],
     mainRelief: 'relief',
     flowTestConnection: 'pressure',
     electrical: [
       { id: 'pto-sol', label: 'PTO shift solenoid', device: 'pto-solenoid', coilResistance: 6.0, wireResistance: 0.35, pullInVoltage: 8.5, fuse: 'F12 (15 A)', connector: 'C-PTO (2-pin, at PTO shift cover)' },
-      { id: 'raise-sol', label: 'Hoist valve RAISE solenoid (S1)', device: 'dcv-solenoid-a', target: 'dcv', coilResistance: 7.2, wireResistance: 0.45, pullInVoltage: 8.5, fuse: 'F14 (10 A)', connector: 'C-DV1 (DIN 43650, valve end A)' },
-      { id: 'lower-sol', label: 'Hoist valve LOWER solenoid (S2)', device: 'dcv-solenoid-b', target: 'dcv', coilResistance: 7.2, wireResistance: 0.45, pullInVoltage: 8.5, fuse: 'F14 (10 A)', connector: 'C-DV2 (DIN 43650, valve end B)' },
+      { id: 'raise-sol', label: 'Hoist valve RAISE solenoid (S1)', device: 'dcv-solenoid-a', function: 'hoist', target: 'dcv', coilResistance: 7.2, wireResistance: 0.45, pullInVoltage: 8.5, fuse: 'F14 (10 A)', connector: 'C-DV1 (DIN 43650, valve end A)' },
+      { id: 'lower-sol', label: 'Hoist valve LOWER solenoid (S2)', device: 'dcv-solenoid-b', function: 'hoist', target: 'dcv', coilResistance: 7.2, wireResistance: 0.45, pullInVoltage: 8.5, fuse: 'F14 (10 A)', connector: 'C-DV2 (DIN 43650, valve end B)' },
     ],
     mechanisms: [
       {

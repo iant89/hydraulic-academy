@@ -26,7 +26,7 @@ Runs fully offline – no external services. Data is stored locally (IndexedDB).
 | Hydraulic Fundamentals | Interactive labs (manual pump/Pascal, pressure vs flow, restrictions, cylinder size, displacement, air, clogged filter), formula calculator, viscosity chart |
 | Component Library | Searchable reference with ISO symbols, interactive cutaways, failure modes, tests, replacement considerations, comparisons, quizzes |
 | Circuit Builder | 8 guided exercises – connect real ports; validation explains what is wrong, why, the consequence and the fix; operational test on the engine |
-| Equipment Simulator | 3D dump truck + live schematic; operator controls (key, throttle, parking brake, PTO, hoist, E-stop); fluid-flow, pressure and cutaway modes; inspection zones; instruments; practice fault injection |
+| Equipment Simulator | 3D dump truck or service-truck crane + live schematic; operator controls (key, throttle, parking brake, PTO, hoist, E-stop); fluid-flow, pressure and cutaway modes; inspection zones; instruments; practice fault injection |
 | Hydraulic Playground | 8 prebuilt experiments, free circuit editor, parameter validation, failure injection, recording, saving and comparison |
 | Virtual Workshop | Workshop bay, structured inspection with scoring, component isolation, tool inventory |
 | Diagnostic Center | 20 symptom-based scenarios across Guided / Practical / Challenge / Master modes, hidden faults, hypotheses, measurement history, confirmed failures, verification and a detailed report |
@@ -62,7 +62,7 @@ src/
 Key principles:
 
 * **One engine, one truth.** The equipment simulator, playground, circuit builder, labs, bench tests, workshop and diagnostics all run `HydraulicSimulation`. Visualizations and instruments only read it.
-* **Data-driven equipment.** A machine is a `MachineDefinition` (circuit + engine/PTO + electrical + mechanisms + test points). Profiles override parameters; no vehicle-specific physics.
+* **Data-driven equipment.** A machine is a `MachineDefinition` (circuit + engine/PTO + operator functions + electrical + mechanisms + test points). Profiles override parameters; no vehicle-specific hydraulics. Two packages ship: **001 hydraulic dump truck** and **002 service truck with telescopic crane** – both built from the same component models.
 * **Hidden faults stay hidden.** Scenario briefs and keys are separate modules; keys load on demand only into the diagnostic engine. Observations are derived from simulation state, never from fault names.
 * **Repairs change the simulation.** Disconnecting, capping, replacing, re-routing and adjusting rebuild the live circuit while preserving state; success is proven only by operating the equipment.
 

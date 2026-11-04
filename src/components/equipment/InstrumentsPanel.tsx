@@ -53,7 +53,10 @@ export function InstrumentsPanel({ compact }: { compact?: boolean }) {
 
   const meter = circuit ? readMultimeter(m, circuit, meterMode) : null;
   const sight = readSightGlass(m);
-  const drift = st.drift.read(m, m.body?.cfg.cylinder ?? 'cyl');
+  const actuators = m.circuit.components.filter((c) => (c.type === 'cylinder' || c.type === 'motor') && m.sim.components.has(c.id));
+  const [driftTarget, setDriftTarget] = useState(m.body?.cfg.cylinder ?? actuators[0]?.id ?? '');
+  const driftIsMotor = m.circuit.components.find((c) => c.id === driftTarget)?.type === 'motor';
+  const drift = st.drift.read(m, driftTarget);
 
   return (
     <Panel title="Diagnostic instruments" icon={<Activity size={14} />}>
@@ -180,8 +183,8 @@ export function InstrumentsPanel({ compact }: { compact?: boolean }) {
             <Eye size={15} /> Reservoir sight glass
           </div>
           <div className={s.reading}>{Math.round(sight.level * 100)} % {sight.belowMin ? '– BELOW MIN' : ''}</div>
-          <div className={s.small}>{m.bodyAngle() > 1 ? 'Body is raised – level reads low because oil is in the cylinder. Check with the body DOWN.' : 'Body lowered – valid level check.'}</div>
-          <Button size="sm" onClick={() => st.addMeasurement('Sight glass', 'reservoir', `${Math.round(sight.level * 100)} %${sight.foamy ? ' foamy' : ''}${m.bodyAngle() > 1 ? ' (body raised)' : ''}`, 'sight-glass')}>
+          <div className={s.small}>{!m.loadsSecured() || (m.crane && m.sim.readout(m.crane.cfg.outriggerCylinder, 'position') > 0.01) ? 'Actuators are extended – the level reads low because oil is in the cylinders. Check with everything retracted/stowed.' : 'Actuators retracted – valid level check.'}</div>
+          <Button size="sm" onClick={() => st.addMeasurement('Sight glass', 'reservoir', `${Math.round(sight.level * 100)} %${sight.foamy ? ' foamy' : ''}${!m.loadsSecured() ? ' (actuators extended)' : ''}`, 'sight-glass')}>
             Record
           </Button>
         </div>
@@ -211,13 +214,14 @@ export function InstrumentsPanel({ compact }: { compact?: boolean }) {
 
         <div className={s.tool} role="group" aria-label="Drift test">
           <div className={s.toolHead}>
-            <Ruler size={15} /> Drift test (tape on stage)
+            <Ruler size={15} /> Drift test (tape mark / paint mark)
           </div>
+          <Select value={driftTarget} onChange={(e) => { setDriftTarget(e.target.value); setDriftOn(false); }} options={actuators.map((a) => ({ value: a.id, label: a.label }))} aria-label="Drift test actuator" />
           {!driftOn ? (
             <Button
               size="sm"
               onClick={() => {
-                st.drift.begin(m, m.body?.cfg.cylinder ?? 'cyl');
+                st.drift.begin(m, driftTarget);
                 setDriftOn(true);
               }}
             >
@@ -225,12 +229,12 @@ export function InstrumentsPanel({ compact }: { compact?: boolean }) {
             </Button>
           ) : (
             <>
-              <div className={s.reading}>{drift ? `${drift.rateMmPerMin.toFixed(1)} mm/min` : '–'}</div>
-              <div className={s.small}>{drift ? `${drift.displacementMm.toFixed(1)} mm in ${drift.elapsed.toFixed(0)} s (negative = settling)` : ''}</div>
+              <div className={s.reading}>{drift ? `${drift.rateMmPerMin.toFixed(1)} ${driftIsMotor ? '°/min (motor shaft)' : 'mm/min'}` : '–'}</div>
+              <div className={s.small}>{drift ? `${drift.displacementMm.toFixed(1)} ${driftIsMotor ? '° of shaft rotation' : 'mm'} in ${drift.elapsed.toFixed(0)} s (negative = settling)` : ''}</div>
               <Button
                 size="sm"
                 onClick={() => {
-                  if (drift) st.addMeasurement('Drift test', `${drift.elapsed.toFixed(0)} s`, `${drift.rateMmPerMin.toFixed(1)} mm/min`, 'drift-test');
+                  if (drift) st.addMeasurement('Drift test', `${m.circuit.components.find((c) => c.id === driftTarget)?.label} ${drift.elapsed.toFixed(0)} s`, `${drift.rateMmPerMin.toFixed(1)} ${driftIsMotor ? '°/min' : 'mm/min'}`, 'drift-test');
                   setDriftOn(false);
                 }}
               >

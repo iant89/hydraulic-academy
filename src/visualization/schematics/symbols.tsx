@@ -83,11 +83,13 @@ function dcvGeom(def: ComponentInstanceDefinition): SymbolGeometry {
     A: { x: cx + 12, y: 0, side: 'top' },
   };
   if (four) portPos.B = { x: cx + 28, y: 0, side: 'top' };
-  const local = (p: string) => ({ P: [12, box - 4], T: [28, box - 4], A: [12, 4], B: [28, 4] })[p as 'P'] as [number, number];
+  if (variant.ports.includes('PB')) portPos.PB = { x: W, y: 30, side: 'right' };
+  const local = (p: string) => ({ P: [12, box - 4], T: [28, box - 4], A: [12, 4], B: [28, 4], PB: [38, 30] })[p as 'P'] as [number, number];
   const drawPaths = (paths: [string, string][], bx: number, color: string) =>
     paths.map(([a, b], i) => {
       const [ax, ay] = local(a);
       const [bx2, by] = local(b);
+      if (a === 'P' && b === 'PB') return <path key={i} d={`M${bx + ax},${ay} C${bx + ax},${ay - 10} ${bx + bx2 - 8},${by} ${bx + bx2},${by}`} stroke={color} fill="none" strokeWidth={1.4} />;
       if (a === 'P' && b === 'T') return <path key={i} d={`M${bx + ax},${ay} C${bx + ax},${ay - 14} ${bx + bx2},${by - 14} ${bx + bx2},${by}`} stroke={color} fill="none" strokeWidth={1.4} />;
       const up = ay > by;
       return (

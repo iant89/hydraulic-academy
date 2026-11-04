@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Stethoscope, Play } from 'lucide-react';
-import { SCENARIO_BRIEFS, loadScenario } from '@/data/scenarios';
+import { SCENARIO_BRIEFS, SCENARIO_PROFILE, loadScenario } from '@/data/scenarios';
+import { BUILTIN_PROFILES } from '@/data/equipment/profiles';
 import { useWorkbay } from '@/stores/workbay';
 import { useTraining } from '@/stores/training';
 import { Badge, Button, Panel, Tabs } from '@/components/ui';
@@ -21,6 +22,9 @@ export default function DiagnosticsPage() {
   const records = useTraining((s) => s.records);
   const [mode, setMode] = useState<TrainingMode>('guided');
   const [loading, setLoading] = useState<string | null>(null);
+  const [equip, setEquip] = useState<string>('all');
+  const equipName = (id: string) => BUILTIN_PROFILES.find((p) => p.id === SCENARIO_PROFILE[id])?.name ?? id;
+  const equipIds = [...new Set(SCENARIO_BRIEFS.map((b) => b.equipmentId))];
   if (session) return <Workspace />;
   const best = (id: string) => records.filter((r) => r.type === 'scenario' && r.refId === id).reduce<number | null>((b, r) => Math.max(b ?? 0, r.score ?? 0), null);
   return (
@@ -32,14 +36,23 @@ export default function DiagnosticsPage() {
         </div>
       </div>
       <Tabs<TrainingMode> tabs={MODES.map((m) => ({ id: m.id, label: m.label }))} value={mode} onChange={setMode} />
-      <p className={p.small}>{MODES.find((m) => m.id === mode)?.desc}</p>
+      <div className={p.row}>
+        <span className={p.small}>{MODES.find((m) => m.id === mode)?.desc}</span>
+        <span style={{ flex: 1 }} />
+        <Button size="sm" active={equip === 'all'} onClick={() => setEquip('all')}>All equipment</Button>
+        {equipIds.map((id) => (
+          <Button key={id} size="sm" active={equip === id} onClick={() => setEquip(id)}>
+            {equipName(id)}
+          </Button>
+        ))}
+      </div>
       <div className={p.cols3}>
-        {SCENARIO_BRIEFS.filter((b) => b.mode === mode).map((b) => {
+        {SCENARIO_BRIEFS.filter((b) => b.mode === mode && (equip === 'all' || b.equipmentId === equip)).map((b) => {
           const sc = best(b.id);
           return (
             <Panel key={b.id} title={b.title} icon={<Stethoscope size={14} />} actions={sc !== null && <Badge tone={sc >= 75 ? 'ok' : 'warn'}>best {sc}</Badge>}>
               <div className={p.list}>
-                <div className={p.small}>Difficulty {'●'.repeat(b.difficulty)}{'○'.repeat(5 - b.difficulty)} · {b.customer}</div>
+                <div className={p.small}>{equipName(b.equipmentId)} · Difficulty {'●'.repeat(b.difficulty)}{'○'.repeat(5 - b.difficulty)} · {b.customer}</div>
                 <div style={{ fontStyle: 'italic', color: 'var(--text-2)' }}>“{b.complaint}”</div>
                 <div className={p.row}>
                   {b.learningObjectives.slice(0, 2).map((o) => (

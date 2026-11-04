@@ -119,6 +119,13 @@ export const DCV_VARIANTS: Record<string, Variant> = {
     plus: [['P', 'A'], ['B', 'T']],
     minus: [['P', 'B'], ['A', 'T']],
   },
+  '4-3-oc-float': {
+    label: '4/3 open-centre section with power-beyond, A & B to tank in neutral (for load-holding valves)',
+    ports: ['P', 'T', 'A', 'B', 'PB'],
+    center: [['P', 'PB'], ['A', 'T'], ['B', 'T']],
+    plus: [['P', 'A'], ['B', 'T']],
+    minus: [['P', 'B'], ['A', 'T']],
+  },
   '4-3-float': {
     label: '4/3 float centre',
     ports: ['P', 'T', 'A', 'B'],
@@ -133,6 +140,7 @@ const DCV_PORT_INFO: Record<string, PortDefinition> = {
   T: port('T', 'T', 'Tank return', 'tank', 'Return to tank through the return filter.'),
   A: port('A', 'A', 'Work port A', 'work', 'Actuator port – energised by the "+" spool position.'),
   B: port('B', 'B', 'Work port B', 'work', 'Actuator port – energised by the "−" spool position.'),
+  PB: port('PB', 'PB', 'Power beyond (carry-over)', 'tank', 'Open-centre carry-over – feeds the next section’s P port or returns to tank.'),
 };
 
 export const dcvModel: ComponentModel = {
@@ -276,7 +284,7 @@ function loadHoldingBuild(kind: 'pilot-check' | 'counterbalance') {
     const nX = ctx.port(def, 'X', 0.005e-3);
     rt.portNodes = { V: nV, L: nL, X: nX };
     const ratio = num(def, 'pilotRatio', kind === 'pilot-check' ? 3 : 4);
-    rt.inputs = { setting: num(def, 'setting', 210) * BAR };
+    rt.inputs = { setting: num(def, 'setting', 210) * BAR, manualBleed: 0 };
     const band = 6 * BAR;
     const area = areaFor(num(def, 'ratedFlow', 80) * LPM, 5 * BAR);
     const G = (num(def, 'ratedFlow', 80) * LPM) / (3 * BAR);
@@ -294,7 +302,9 @@ function loadHoldingBuild(kind: 'pilot-check' | 'counterbalance') {
         // free flow V→L through integral check
         let q = pV - pL > 0.5 * BAR ? G * (pV - pL - 0.5 * BAR) : 0;
         // controlled reverse flow L→V
-        q -= orificeFlow(area * open(pL, pX), pL - pV, env.current.fluid.rho);
+        // Manual bleed/override screw (service): opens the reverse path deliberately.
+        const bleed = (rt.inputs.manualBleed ?? 0) > 0 ? 0.15 : 0;
+        q -= orificeFlow(area * Math.max(open(pL, pX), bleed), pL - pV, env.current.fluid.rho);
         q += (1e-14 + 4e-12 * sev('load-valve-leak')) * (pV - pL);
         out[0] = -q;
         out[1] = q;

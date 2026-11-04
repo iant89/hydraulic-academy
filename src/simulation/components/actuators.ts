@@ -201,14 +201,16 @@ export const motorModel: ComponentModel = {
     const nB = ctx.port(def, 'B', 0.05e-3);
     const nL = cd ? ctx.port(def, 'CD', 0.02e-3) : nB;
     rt.portNodes = cd ? { A: nA, B: nB, CD: nL } : { A: nA, B: nB };
-    rt.inputs = { loadTorque: num(def, 'loadTorque', 50) };
+    // loadTorque: friction-like resistance (both directions). externalTorque: signed
+    // load torque (positive opposes positive rotation) – e.g. a suspended winch load.
+    rt.inputs = { loadTorque: num(def, 'loadTorque', 50), externalTorque: 0 };
     const G0 = ((1 - volEff) * Vd * (1500 / 60)) / (150 * BAR);
     const damping = 0.04; // N·m per rpm
     let n = 0;
     let angle = 0;
     const sev = (k: string) => env.current.faults.severity(def.id, k);
     const speed = (pA: number, pB: number) => {
-      const T = ((Vd * (pA - pB)) / (2 * Math.PI)) * mech;
+      const T = ((Vd * (pA - pB)) / (2 * Math.PI)) * mech - (rt.inputs.externalTorque ?? 0);
       const resist = (rt.inputs.loadTorque ?? 0) + 2 + 400 * sev('cyl-binding');
       let s = 0;
       if (T > resist) s = (T - resist) / damping;
@@ -256,6 +258,7 @@ export const motorModel: ComponentModel = {
     rt.readouts = (e) => [
       { key: 'speed', label: 'Shaft speed', value: n, quantity: 'rpm' },
       { key: 'torque', label: 'Output torque', value: ((Vd * (e.pressure(nA) - e.pressure(nB))) / (2 * Math.PI)) * mech, quantity: 'torque' },
+      { key: 'load', label: 'Load torque', value: rt.inputs.externalTorque ?? 0, quantity: 'torque' },
       { key: 'dp', label: 'Δp across motor', value: e.pressure(nA) - e.pressure(nB), quantity: 'pressure' },
       ...(maxAngle > 0 ? [{ key: 'angle', label: 'Angle (deg)', value: angle, quantity: 'none' as const }] : []),
     ];

@@ -3,7 +3,7 @@ import { pumpTorque } from '../physics/formulas';
 import { HydraulicSimulation, type SimSnapshot, type SimulationOptions } from '../hydraulics/simulation';
 import type { CircuitDefinition, ComponentInstanceDefinition, ConnectionDefinition, SimEvent } from '../hydraulics/types';
 import type { FaultSpec } from '../failures/faults';
-import { DumpBodyMechanism } from './mechanisms';
+import { CraneMechanism, DumpBodyMechanism, type CraneState } from './mechanisms';
 import type { ElectricalCircuitConfig, MachineDefinition } from './types';
 
 export type PtoState = 'disengaged' | 'engaging' | 'engaged';
@@ -14,7 +14,8 @@ export interface ControlState {
   throttle: number;
   parkingBrake: boolean;
   ptoSwitch: boolean;
-  hoist: -1 | 0 | 1;
+  /** Operator function commands (−1 … +1) keyed by function id. */
+  functions: Record<string, number>;
   emergencyStop: boolean;
 }
 
@@ -44,6 +45,7 @@ export interface MachineSnapshot {
   engineRpm: number;
   pto: { state: PtoState; timer: number; outputRpm: number; dropout: number };
   payload: number;
+  crane: { hookLoad: number; cableOut: number } | null;
   disconnected: string[];
   removed: Record<string, ComponentInstanceDefinition>;
   stallTimer: number;
@@ -69,13 +71,16 @@ export class MachineSimulation {
     throttle: 0,
     parkingBrake: true,
     ptoSwitch: false,
-    hoist: 0,
+    functions: {},
     emergencyStop: false,
   };
+  /** Directions inhibited by safety systems (LMI, anti-two-block): function id → blocked sign. */
+  inhibited: Record<string, number[]> = {};
   safety: SafetyState = { lotoApplied: false, wheelsChocked: false, bodyPropInstalled: false };
   engineRpm = 0;
   pto = { state: 'disengaged' as PtoState, timer: 0, outputRpm: 0, dropout: 0 };
   body: DumpBodyMechanism | null;
+  crane: CraneMechanism | null;
   /** Connections currently disconnected for service. */
   disconnected = new Set<string>();
   /** Components removed from the machine (kept for inspection). */
@@ -86,13 +91,37 @@ export class MachineSimulation {
   private inhibitLogged = '';
   private lastPumpTorque = 0;
 
-  constructor(def: MachineDefinition, opts: SimulationOptions & { payload?: number } = {}) {
+  constructor(def: MachineDefinition, opts: SimulationOptions & { payload?: number; hookLoad?: number } = {}) {
     this.def = def;
     this.circuit = structuredClone(def.circuit);
     this.sim = new HydraulicSimulation(this.circuit, opts);
-    const m = def.mechanisms.find((x) => x.type === 'dump-body');
-    this.body = m ? new DumpBodyMechanism(m, opts.payload ?? m.ratedPayload) : null;
+    for (const f of def.functions) this.controls.functions[f.id] = 0;
+    let body: DumpBodyMechanism | null = null;
+    let crane: CraneMechanism | null = null;
+    for (const m of def.mechanisms) {
+      if (m.type === 'dump-body') body = new DumpBodyMechanism(m, opts.payload ?? m.ratedPayload);
+      if (m.type === 'crane') crane = new CraneMechanism(m, opts.hookLoad ?? 0);
+    }
+    this.body = body;
+    this.crane = crane;
     this.sim.onBeforeStep = () => this.applyBoundaryConditions();
+  }
+
+  /** The primary operator function (e.g. the dump hoist). */
+  get primaryFunction(): string {
+    return this.def.functions[0]?.id ?? '';
+  }
+
+  command(fn: string): number {
+    return this.controls.functions[fn] ?? 0;
+  }
+
+  anyCommanded(): boolean {
+    return Object.values(this.controls.functions).some((v) => v !== 0);
+  }
+
+  functionForValve(valve: string) {
+    return this.def.functions.find((f) => f.valve === valve);
   }
 
   get faults() {
@@ -147,19 +176,36 @@ export class MachineSimulation {
     this.controls.ptoSwitch = on;
     this.inhibitLogged = '';
   }
+  setFunction(fn: string, cmd: number) {
+    if (fn in this.controls.functions) this.controls.functions[fn] = clamp(cmd, -1, 1);
+  }
+  /** Primary function (dump hoist) – kept for the dump-truck workflows. */
   setHoist(cmd: -1 | 0 | 1) {
-    this.controls.hoist = cmd;
+    this.setFunction(this.primaryFunction, cmd);
+  }
+  get hoist(): number {
+    return this.command(this.primaryFunction);
+  }
+  neutralAll() {
+    for (const k of Object.keys(this.controls.functions)) this.controls.functions[k] = 0;
   }
   setEmergencyStop(on: boolean) {
     this.controls.emergencyStop = on;
     if (on) {
       this.stopEngine();
-      this.controls.hoist = 0;
+      this.neutralAll();
       this.log('alarm', 'controls', 'estop', 'EMERGENCY STOP activated – engine stopped, controls de-energised.');
     }
   }
   setPayload(kg: number) {
     if (this.body) this.body.payload = Math.max(0, kg);
+  }
+  /** Crane: attach a load (kg) to the hook. */
+  setHookLoad(kg: number) {
+    if (this.crane) this.crane.hookLoad = Math.max(0, kg);
+  }
+  craneState(): CraneState | null {
+    return this.crane?.state ?? null;
   }
 
   // ───────────── electrical ─────────────
@@ -171,8 +217,8 @@ export class MachineSimulation {
   private circuitEnergised(c: ElectricalCircuitConfig): boolean {
     if (!this.controls.ignition || this.controls.emergencyStop) return false;
     if (c.device === 'pto-solenoid') return this.controls.ptoSwitch;
-    if (c.device === 'dcv-solenoid-a') return this.controls.hoist > 0;
-    if (c.device === 'dcv-solenoid-b') return this.controls.hoist < 0;
+    if (c.device === 'dcv-solenoid-a') return this.command(c.function ?? this.primaryFunction) > 0;
+    if (c.device === 'dcv-solenoid-b') return this.command(c.function ?? this.primaryFunction) < 0;
     return false;
   }
 
@@ -303,12 +349,22 @@ export class MachineSimulation {
       pump.inputs.driveRotation = pto.outputRotation === 'cw' ? 1 : -1;
     }
 
-    // Directional valve command from solenoids.
-    const valve = this.sim.components.get(this.def.hoistValve);
-    if (valve) {
-      const a = elec.find((e) => this.def.electrical.find((c) => c.id === e.id)?.device === 'dcv-solenoid-a');
-      const b = elec.find((e) => this.def.electrical.find((c) => c.id === e.id)?.device === 'dcv-solenoid-b');
-      const cmd = (a?.pulledIn ? 1 : 0) - (b?.pulledIn ? 1 : 0);
+    // Crane mechanism state first: it drives the safety interlocks.
+    if (this.crane) this.updateCrane();
+
+    // Directional valve commands: solenoid functions from the electrical circuit, lever functions directly.
+    for (const fn of this.def.functions) {
+      const valve = this.sim.components.get(fn.valve);
+      if (!valve) continue;
+      let cmd: number;
+      if (fn.actuation === 'solenoid') {
+        const sol = (dev: string) => elec.find((e) => {
+          const c = this.def.electrical.find((x) => x.id === e.id);
+          return c?.device === dev && (c.function ?? this.primaryFunction) === fn.id;
+        });
+        cmd = (sol('dcv-solenoid-a')?.pulledIn ? 1 : 0) - (sol('dcv-solenoid-b')?.pulledIn ? 1 : 0);
+      } else cmd = this.controls.emergencyStop ? 0 : this.command(fn.id);
+      if (cmd !== 0 && this.inhibited[fn.id]?.includes(Math.sign(cmd))) cmd = 0;
       valve.inputs.command = cmd;
     }
 
@@ -329,6 +385,133 @@ export class MachineSimulation {
       const dp = Math.max(0, this.sim.pressureAt(this.def.pump, 'OUT') - this.sim.pressureAt(this.def.pump, 'IN'));
       this.lastPumpTorque = pump.inputs.speed ? pumpTorque(Vd, dp, Number(pump.def.params.mechanicalEfficiency) || 0.88) : 0;
     }
+  }
+
+  private lmiLogged = false;
+  private a2bLogged = false;
+  private unstableLogged = false;
+
+  private updateCrane() {
+    const cr = this.crane!;
+    const c = cr.cfg;
+    const get = (id: string) => this.sim.components.get(id);
+    const st = (id: string, k: string) => get(id)?.getState()[k] ?? 0;
+    const s = cr.compute({ liftX: st(c.liftCylinder, 'x'), extendX: st(c.extendCylinder, 'x'), winchAngleDeg: st(c.winchMotor, 'angle'), slewAngleDeg: st(c.slewMotor, 'angle'), outriggerX: st(c.outriggerCylinder, 'x') });
+    const lift = get(c.liftCylinder);
+    if (lift) lift.inputs.externalForce = cr.liftForce(st(c.liftCylinder, 'x'));
+    const ext = get(c.extendCylinder);
+    if (ext) ext.inputs.externalForce = cr.extendForce();
+    const winch = get(c.winchMotor);
+    if (winch) winch.inputs.externalTorque = cr.winchTorque();
+    const slew = get(c.slewMotor);
+    if (slew) slew.inputs.loadTorque = c.slewFrictionTorque;
+    const out = get(c.outriggerCylinder);
+    if (out) out.inputs.externalForce = cr.outriggerForce();
+
+    // Safety systems: load-moment indicator and anti-two-block cut out the motions that make things worse.
+    const fnOf = (actuator: string) => this.def.functions.find((f) => f.actuator === actuator)?.id;
+    const inh: Record<string, number[]> = {};
+    const block = (actuator: string, dir: number) => {
+      const id = fnOf(actuator);
+      if (id) inh[id] = [...(inh[id] ?? []), dir];
+    };
+    if (s.lmiCutout) {
+      block(c.liftCylinder, -1);
+      block(c.extendCylinder, 1);
+      block(c.winchMotor, 1);
+      if (!this.lmiLogged) this.log('alarm', 'lmi', 'lmi-cutout', `Load moment limit: ${(s.momentFraction * 100).toFixed(0)} % of capacity – boom down, extend and winch up are cut out.`);
+      this.lmiLogged = true;
+    } else this.lmiLogged = false;
+    if (s.a2b) {
+      block(c.winchMotor, 1);
+      block(c.extendCylinder, 1);
+      if (!this.a2bLogged) this.log('warning', 'a2b', 'a2b', 'Anti-two-block: hook block at the boom tip – winch up and boom extend cut out.');
+      this.a2bLogged = true;
+    } else this.a2bLogged = false;
+    if (s.loadSuspended && !s.outriggerSet) {
+      if (!this.unstableLogged) this.log('alarm', 'stability', 'unstable-lift', 'UNSAFE: load lifted without the stabilizer set – capacity is halved and the truck can tip.');
+      this.unstableLogged = true;
+    } else if (!s.loadSuspended) this.unstableLogged = false;
+    this.inhibited = inh;
+  }
+
+  /** True when no gravity load is held by trapped oil (body down/propped; boom stowed with load landed). */
+  loadsSecured(): boolean {
+    if (this.body && !(this.bodyAngle() < 0.5 || this.safety.bodyPropInstalled)) return false;
+    if (this.crane) {
+      const c = this.crane.cfg;
+      const s = this.crane.state;
+      if (this.sim.readout(c.liftCylinder, 'position') > 0.003) return false;
+      if (s.loadSuspended) return false;
+    }
+    return true;
+  }
+
+  securedLabel(): string {
+    return this.crane ? 'Load landed, boom retracted and stowed' : 'Body lowered or propped';
+  }
+
+  /**
+   * Bring all gravity loads to rest using the machine's own functions (needs
+   * the engine for pilot-operated load-holding valves).
+   */
+  secureLoads(): string {
+    if (this.loadsSecured()) return 'Loads already secured.';
+    const drive = (fn: string | undefined, cmd: number, done: () => boolean, maxS = 90) => {
+      if (!fn) return;
+      this.setFunction(fn, cmd);
+      for (let t = 0; t < maxS && !done(); t += 0.25) this.advance(0.25);
+      this.setFunction(fn, 0);
+      this.advance(0.5);
+    };
+    if (this.body) {
+      const wasRunning = this.controls.engineRunning;
+      this.setIgnition(true);
+      if (wasRunning) this.controls.engineRunning = true;
+      this.safety.bodyPropInstalled = false;
+      drive(this.primaryFunction, -1, () => this.cylinderExtension() < 0.002, 60);
+      return this.bodyAngle() < 0.5 ? 'Body lowered fully onto the frame.' : 'Body did not lower fully.';
+    }
+    if (this.crane) {
+      const c = this.crane.cfg;
+      if (!this.controls.engineRunning) this.startEngine();
+      this.setParkingBrake(true);
+      this.setThrottle(0.2);
+      this.setPtoSwitch(true);
+      this.advance(2);
+      const fn = (a: string) => this.def.functions.find((f) => f.actuator === a)?.id;
+      drive(fn(c.winchMotor), -1, () => !this.crane!.state.loadSuspended);
+      drive(fn(c.extendCylinder), -1, () => this.sim.readout(c.extendCylinder, 'position') < 0.003);
+      drive(fn(c.liftCylinder), -1, () => this.sim.readout(c.liftCylinder, 'position') < 0.002);
+      this.setThrottle(0);
+      return this.loadsSecured() ? 'Load landed, boom retracted and lowered into its rest.' : 'Could not secure the boom with the hydraulics – support it mechanically per the manufacturer procedure.';
+    }
+    return 'Nothing to secure.';
+  }
+
+  /**
+   * Key on / engine off: cycle every control to vent trapped line pressure,
+   * then (only with loads secured) open the manual bleed on load-holding valves.
+   */
+  relieveStoredPressure(): string {
+    this.setIgnition(true);
+    for (const f of this.def.functions) {
+      for (const d of [-1, 1]) {
+        this.setFunction(f.id, d);
+        this.advance(0.6);
+      }
+      this.setFunction(f.id, 0);
+    }
+    const holding = this.circuit.components.filter((c) => c.type === 'counterbalance' || c.type === 'pilot-check');
+    if (holding.length) {
+      if (!this.loadsSecured()) this.log('alarm', 'service', 'unsupported-load', 'UNSAFE: load-holding valve bled while a load was supported by it.');
+      for (const h of holding) this.sim.setInput(h.id, 'manualBleed', 1);
+      this.advance(3);
+      for (const h of holding) this.sim.setInput(h.id, 'manualBleed', 0);
+    }
+    this.setIgnition(false);
+    this.advance(1);
+    return `Controls cycled${holding.length ? ' and load-holding valves bled' : ''}. Highest remaining pressure ${(this.maxSystemPressure() / BAR).toFixed(1)} bar.`;
   }
 
   private ptoCircuitId() {
@@ -374,6 +557,7 @@ export class MachineSimulation {
     if (this.controls.engineRunning) h.push('Engine running – PTO/pump can be driven.');
     if (this.pto.state !== 'disengaged') h.push('PTO engaged.');
     if (this.body && this.bodyAngle() > 1 && !this.safety.bodyPropInstalled) h.push('Dump body raised and NOT mechanically supported – gravity load is held only by trapped oil.');
+    if (this.crane && !this.loadsSecured()) h.push('Crane boom raised or load suspended – held by counterbalance valves.');
     if (!this.isDepressurised()) h.push(`Trapped hydraulic pressure present (${(this.maxSystemPressure() / BAR).toFixed(0)} bar).`);
     for (const c of this.circuit.components) if (c.type === 'accumulator' && this.sim.readout(c.id, 'pressure') > BAR) h.push(`${c.label} charged.`);
     return h;
@@ -591,11 +775,12 @@ export class MachineSimulation {
   snapshot(): MachineSnapshot {
     return {
       hydraulics: this.sim.snapshot(),
-      controls: { ...this.controls },
+      controls: { ...this.controls, functions: { ...this.controls.functions } },
       safety: { ...this.safety },
       engineRpm: this.engineRpm,
       pto: { ...this.pto },
       payload: this.body?.payload ?? 0,
+      crane: this.crane ? { hookLoad: this.crane.hookLoad, cableOut: this.crane.cableOut } : null,
       disconnected: [...this.disconnected],
       removed: Object.fromEntries(this.removed),
       stallTimer: this.stallTimer,
@@ -606,11 +791,15 @@ export class MachineSimulation {
   }
 
   restore(s: MachineSnapshot) {
-    this.controls = { ...s.controls };
+    this.controls = { ...s.controls, functions: { ...s.controls.functions } };
     this.safety = { ...s.safety };
     this.engineRpm = s.engineRpm;
     this.pto = { ...s.pto };
     if (this.body) this.body.payload = s.payload;
+    if (this.crane && s.crane) {
+      this.crane.hookLoad = s.crane.hookLoad;
+      this.crane.cableOut = s.crane.cableOut;
+    }
     this.disconnected = new Set(s.disconnected);
     this.removed = new Map(Object.entries(s.removed));
     this.stallTimer = s.stallTimer;

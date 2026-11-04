@@ -22,9 +22,9 @@ test('operate the dump truck: start, engage PTO, raise the body', async ({ page 
   await page.getByRole('button', { name: 'Start engine' }).click();
   await page.getByRole('button', { name: /PTO switch OFF/ }).click();
   await expect(page.getByText('PTO ENGAGED', { exact: true })).toBeVisible();
-  await page.getByText('Latch hoist switch').click();
-  await page.getByRole('button', { name: 'Raise body (hold)' }).dispatchEvent('pointerdown');
-  await page.getByRole('button', { name: '×10' }).click();
+  await page.getByText('Latch controls').click();
+  await page.getByRole('button', { name: 'Hoist RAISE (hold)' }).dispatchEvent('pointerdown');
+  await page.getByRole('button', { name: 'Time ×10' }).click();
   await expect.poll(async () => Number((await page.getByText(/^\d+\.\d°$/).first().textContent())?.replace('°', '')), { timeout: 30_000 }).toBeGreaterThan(20);
   await expect(page.getByText('PTO engaged.', { exact: true })).toBeVisible();
   // Install a gauge at TP1 and read pressure
@@ -50,7 +50,7 @@ test('full milestone: diagnose a hidden fault, repair it safely and verify', asy
   await page.getByRole('tab', { name: 'Operate & inspect' }).click();
   await page.getByRole('button', { name: 'Start engine' }).click();
   await page.getByRole('button', { name: /PTO switch OFF/ }).click();
-  await page.getByRole('button', { name: 'Raise body (hold)' }).dispatchEvent('pointerdown');
+  await page.getByRole('button', { name: 'Hoist RAISE (hold)' }).dispatchEvent('pointerdown');
   await page.waitForTimeout(1500);
   await expect(page.getByText('PTO DISENGAGED', { exact: true })).toBeVisible();
 
@@ -84,15 +84,15 @@ test('full milestone: diagnose a hidden fault, repair it safely and verify', asy
   // Verify by operation
   await page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Diagnostic Center' }).click();
   await page.getByRole('button', { name: 'Declare repair complete' }).click();
-  await page.getByRole('button', { name: '×10' }).click();
+  await page.getByRole('button', { name: 'Time ×10' }).click();
   await page.getByRole('tab', { name: 'Operate & inspect' }).click();
   await page.getByRole('button', { name: 'Rated' }).click();
   await page.getByRole('button', { name: 'Start engine' }).click();
   await page.getByRole('button', { name: /PTO switch OFF/ }).click();
   await expect(page.getByText('PTO ENGAGED', { exact: true })).toBeVisible();
   await page.getByRole('slider', { name: /Engine speed/ }).fill('0.35');
-  await page.getByText('Latch hoist switch').click();
-  await page.getByRole('button', { name: 'Raise body (hold)' }).dispatchEvent('pointerdown');
+  await page.getByText('Latch controls').click();
+  await page.getByRole('button', { name: 'Hoist RAISE (hold)' }).dispatchEvent('pointerdown');
   await expect(page.getByText('PTO engages and pump delivers flow').locator('..').getByText(/PTO engaged and pump delivering flow/)).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText(/Loaded raise took/)).toBeVisible({ timeout: 60_000 });
 
@@ -122,4 +122,36 @@ test('playground: record a measurement on the engine', async ({ page }) => {
   await page.goto('/#/playground');
   await page.getByRole('button', { name: 'Record measurement' }).click();
   await expect(page.getByText('Actual simulation results (1)')).toBeVisible();
+});
+
+test('service crane: load the profile, set the stabilizer, rig and lift a load, see the load moment', async ({ page }) => {
+  test.setTimeout(180_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/#/profiles');
+  await page.getByRole('button', { name: /Service truck – 2 t telescopic crane/ }).click();
+  await page.getByRole('button', { name: 'Load into work bay' }).click();
+  await expect(page.locator('main h1')).toContainText('Service truck – 2 t telescopic crane');
+  await page.getByRole('button', { name: 'Start engine' }).click();
+  await page.getByRole('button', { name: /PTO switch OFF/ }).click();
+  await expect(page.getByText('PTO ENGAGED', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Time ×10' }).click();
+  await page.getByText('Latch controls').click();
+  await page.getByRole('button', { name: 'Stabilizer DOWN (hold)' }).dispatchEvent('pointerdown');
+  await expect(page.getByText('Stabilizer SET')).toBeVisible({ timeout: 30_000 });
+  await page.getByRole('button', { name: 'Stabilizer neutral' }).dispatchEvent('pointerdown');
+  await page.getByRole('button', { name: 'Winch DOWN (hold)' }).dispatchEvent('pointerdown');
+  await expect(page.getByRole('button', { name: '1000 kg' })).toBeEnabled({ timeout: 30_000 });
+  await page.getByRole('button', { name: 'Winch neutral' }).dispatchEvent('pointerdown');
+  await page.getByRole('button', { name: '1000 kg' }).click();
+  await page.getByRole('button', { name: 'Boom lift UP (hold)' }).dispatchEvent('pointerdown');
+  await expect.poll(async () => Number((await page.getByText(/^-?\d+\.\d°$/).first().textContent())?.replace('°', '')), { timeout: 20_000, intervals: [100] }).toBeGreaterThan(8);
+  await page.getByRole('button', { name: 'Boom lift neutral' }).dispatchEvent('pointerdown');
+  await page.getByRole('button', { name: 'Winch UP (hold)' }).dispatchEvent('pointerdown');
+  await expect(page.getByText('1000 kg (suspended)', { exact: false })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole('button', { name: 'Winch neutral' }).dispatchEvent('pointerdown');
+  await expect(page.getByText(/Load moment [1-9]\d* %/).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Boom extend OUT (hold)' }).dispatchEvent('pointerdown');
+  await expect(page.getByText('LMI CUT-OUT')).toBeVisible({ timeout: 40_000 });
+  expect(errors).toEqual([]);
 });

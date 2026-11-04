@@ -10,7 +10,13 @@ export type VerificationCriterion =
   | { type: 'no-leaks'; label: string; seconds: number }
   | { type: 'hold-drift'; label: string; maxMmPerMin: number }
   | { type: 'lowers'; label: string }
-  | { type: 'no-cavitation'; label: string };
+  | { type: 'no-cavitation'; label: string }
+  /** Every operator function observed moving in both directions. */
+  | { type: 'all-functions'; label: string }
+  /** An actuator holds position (no function commanded) – component id; mm/min (cylinders) or deg/min (motors). */
+  | { type: 'actuator-holds'; label: string; component: string; maxRatePerMin: number; requireSuspendedLoad?: boolean }
+  /** Crane: lift a load of at least `minKg` clear of the ground with the stabilizer set. */
+  | { type: 'lift-load'; label: string; minKg: number };
 
 /** Technician-visible scenario data. Contains NO fault information. */
 export interface ScenarioBrief {
@@ -24,6 +30,8 @@ export interface ScenarioBrief {
   history: string[];
   conditions: {
     payload: number;
+    /** Crane: load attached to the hook at the start (kg). */
+    hookLoad?: number;
     ambient: number;
     initialTemperature: number;
     hoursSinceService?: number;

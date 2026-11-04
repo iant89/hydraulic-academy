@@ -125,7 +125,8 @@ describe('equipment profiles', () => {
     const p20 = BUILTIN_PROFILES.find((p) => p.id === 'generic-dt-20')!;
     const def = machineFromProfile(p20);
     expect(def.circuit.components.find((c) => c.id === 'pump')!.params.displacement).toBe(90);
-    expect(def.mechanisms[0]!.ratedPayload).toBe(20000);
+    const mech = def.mechanisms[0]!;
+    expect(mech.type === 'dump-body' && mech.ratedPayload).toBe(20000);
     const m = new MachineSimulation(def, { payload: 20000 });
     m.startEngine();
     m.advance(1);

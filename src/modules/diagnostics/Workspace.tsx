@@ -9,7 +9,7 @@ import { FAULT_KINDS, FAULT_INFO } from '@/simulation/failures/catalog';
 import type { ScoreReport } from '@/simulation/scenarios/session';
 import { newId } from '@/services/training/records';
 import { href } from '@/app/router';
-import { DumpTruck3D } from '@/visualization/equipment/DumpTruck3D';
+import { Equipment3D } from '@/visualization/equipment/Equipment3D';
 import { Schematic } from '@/visualization/schematics/Schematic';
 import { OperatorControls } from '@/components/equipment/OperatorControls';
 import { InstrumentsPanel } from '@/components/equipment/InstrumentsPanel';
@@ -163,7 +163,7 @@ export function Workspace() {
         <div className={p.split}>
           <div className={p.stack}>
             <div className={p.viewport}>
-              <DumpTruck3D getMachine={() => useWorkbay.getState().machine} points={points} selectedPoint={point} onSelectPoint={setPoint} mode="normal" />
+              <Equipment3D getMachine={() => useWorkbay.getState().machine} points={points} selectedPoint={point} onSelectPoint={setPoint} mode="normal" />
             </div>
             <InspectionPanel pointId={point} onClose={() => setPoint(null)} />
           </div>

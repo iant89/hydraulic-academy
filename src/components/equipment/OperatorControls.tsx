@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Key, OctagonX, Power, PowerOff, RotateCcw } from 'lucide-react';
+import { ArrowDown, ArrowUp, Key, OctagonX, Power, PowerOff, RotateCcw, Anchor } from 'lucide-react';
 import { useWorkbay } from '@/stores/workbay';
 import { useTick } from '@/stores/simLoop';
-import { Badge, Button, Panel, Range } from '@/components/ui';
+import type { MachineFunction } from '@/simulation/machine/types';
+import { Badge, Button, Meter, Panel, Range } from '@/components/ui';
 import { useFmt } from './useQ';
 import s from './equipment.module.css';
+
+const opId = (f: MachineFunction, dir: number) => (f.id === 'hoist' ? (dir > 0 ? 'op:raise' : 'op:lower') : `op:${f.id}`);
 
 /** Operator controls – every control acts on the live MachineSimulation. */
 export function OperatorControls() {
@@ -13,36 +16,39 @@ export function OperatorControls() {
   const session = useWorkbay((st) => st.session);
   const fmt = useFmt();
   const [latch, setLatch] = useState(false);
-  const holding = useRef<-1 | 0 | 1>(0);
+  const holding = useRef<{ fn: string; dir: number } | null>(null);
   const c = m.controls;
   const op = (id: string, detail: string) => session?.record('operate', id, detail);
+  const fns = m.def.functions;
 
-  const hoist = (cmd: -1 | 0 | 1) => {
-    holding.current = cmd;
-    m.setHoist(cmd);
-    if (cmd === 1) op('op:raise', 'Hoist RAISE');
-    if (cmd === -1) op('op:lower', 'Hoist LOWER');
+  const drive = (f: MachineFunction, dir: number) => {
+    holding.current = dir ? { fn: f.id, dir } : null;
+    m.setFunction(f.id, dir);
+    if (dir) op(opId(f, dir), `${f.label} ${dir > 0 ? f.positive : f.negative}`);
+  };
+  const releaseAll = () => {
+    if (latch || !holding.current) return;
+    m.setFunction(holding.current.fn, 0);
+    holding.current = null;
   };
   useEffect(() => {
-    const up = () => {
-      if (!latch && holding.current !== 0) hoist(0);
-    };
-    window.addEventListener('pointerup', up);
-    return () => window.removeEventListener('pointerup', up);
+    window.addEventListener('pointerup', releaseAll);
+    return () => window.removeEventListener('pointerup', releaseAll);
   });
   useEffect(() => {
+    const primary = fns[0];
     const key = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'TEXTAREA' || (e.target as HTMLElement)?.tagName === 'SELECT') return;
-      if (e.repeat) return;
-      if (e.key === 'r' || e.key === 'ArrowUp') hoist(1);
-      if (e.key === 'l' || e.key === 'ArrowDown') hoist(-1);
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.repeat) return;
+      if (primary && fns.length === 1 && (e.key === 'r' || e.key === 'ArrowUp')) drive(primary, 1);
+      if (primary && fns.length === 1 && (e.key === 'l' || e.key === 'ArrowDown')) drive(primary, -1);
       if (e.key === ' ') {
         e.preventDefault();
         m.setEmergencyStop(true);
       }
     };
     const keyUp = (e: KeyboardEvent) => {
-      if (!latch && ['r', 'l', 'ArrowUp', 'ArrowDown'].includes(e.key)) hoist(0);
+      if (['r', 'l', 'ArrowUp', 'ArrowDown'].includes(e.key)) releaseAll();
     };
     window.addEventListener('keydown', key);
     window.addEventListener('keyup', keyUp);
@@ -53,6 +59,7 @@ export function OperatorControls() {
   });
 
   const rated = m.body?.cfg.ratedPayload ?? 0;
+  const crane = m.craneState();
   return (
     <Panel title="Operator controls" actions={<Badge tone={m.pto.state === 'engaged' ? 'ok' : m.pto.state === 'engaging' ? 'warn' : undefined}>PTO {m.pto.state.toUpperCase()}</Badge>}>
       <div className={s.controls}>
@@ -79,29 +86,71 @@ export function OperatorControls() {
             <span className={s.lamp} data-on={m.pto.state === 'engaged'} /> PTO switch {c.ptoSwitch ? 'ON' : 'OFF'}
           </Button>
         </div>
-        <div className={s.hoist}>
-          <button className={s.hoistBtn} data-active={c.hoist === 1} onPointerDown={() => hoist(c.hoist === 1 && latch ? 0 : 1)} aria-label="Raise body (hold)">
-            <ArrowUp size={18} /> RAISE
-          </button>
-          <button className={s.hoistBtn} data-active={c.hoist === 0} onPointerDown={() => hoist(0)} aria-label="Hold">
-            HOLD
-          </button>
-          <button className={s.hoistBtn} data-active={c.hoist === -1} onPointerDown={() => hoist(c.hoist === -1 && latch ? 0 : -1)} aria-label="Lower body (hold)">
-            <ArrowDown size={18} /> LOWER
-          </button>
-        </div>
+        {fns.map((f) => {
+          const cmd = m.command(f.id);
+          const blocked = m.inhibited[f.id] ?? [];
+          return (
+            <div key={f.id}>
+              {fns.length > 1 && (
+                <div className={s.small} style={{ marginBottom: 3, display: 'flex', gap: 6 }}>
+                  {f.label} {blocked.length > 0 && <Badge tone="danger">cut out {blocked.map((d) => (d > 0 ? f.positive : f.negative)).join('/')}</Badge>}
+                </div>
+              )}
+              <div className={s.hoist} style={fns.length > 1 ? { gridTemplateColumns: '1fr 0.6fr 1fr' } : undefined}>
+                <button className={s.hoistBtn} style={fns.length > 1 ? { height: 36 } : undefined} data-active={cmd > 0} onPointerDown={() => drive(f, cmd > 0 && latch ? 0 : 1)} aria-label={`${f.label} ${f.positive} (hold)`}>
+                  <ArrowUp size={16} /> {f.positive}
+                </button>
+                <button className={s.hoistBtn} style={fns.length > 1 ? { height: 36 } : undefined} data-active={cmd === 0} onPointerDown={() => drive(f, 0)} aria-label={`${f.label} neutral`}>
+                  {fns.length > 1 ? 'N' : 'HOLD'}
+                </button>
+                <button className={s.hoistBtn} style={fns.length > 1 ? { height: 36 } : undefined} data-active={cmd < 0} onPointerDown={() => drive(f, cmd < 0 && latch ? 0 : -1)} aria-label={`${f.label} ${f.negative} (hold)`}>
+                  <ArrowDown size={16} /> {f.negative}
+                </button>
+              </div>
+            </div>
+          );
+        })}
         <label className={s.check}>
-          <input type="checkbox" checked={latch} onChange={(e) => setLatch(e.target.checked)} /> Latch hoist switch (otherwise press-and-hold, keys R / L)
+          <input type="checkbox" checked={latch} onChange={(e) => setLatch(e.target.checked)} /> Latch controls (otherwise press-and-hold{fns.length === 1 ? ', keys R / L' : ''})
         </label>
-        <div className={s.ctlRow}>
-          <span className={s.small}>Payload</span>
-          {[0, 0.5, 1].map((f) => (
-            <Button key={f} size="sm" active={Math.abs((m.body?.payload ?? 0) - rated * f) < 50} onClick={() => m.setPayload(rated * f)} disabled={m.bodyAngle() > 1}>
-              {f === 0 ? 'Empty' : f === 0.5 ? 'Half' : 'Rated'}
-            </Button>
-          ))}
-          <span className={s.small}>{fmt(m.body?.payload ?? 0, 'mass')}</span>
-        </div>
+        {m.body && (
+          <div className={s.ctlRow}>
+            <span className={s.small}>Payload</span>
+            {[0, 0.5, 1].map((f) => (
+              <Button key={f} size="sm" active={Math.abs((m.body?.payload ?? 0) - rated * f) < 50} onClick={() => m.setPayload(rated * f)} disabled={m.bodyAngle() > 1}>
+                {f === 0 ? 'Empty' : f === 0.5 ? 'Half' : 'Rated'}
+              </Button>
+            ))}
+            <span className={s.small}>{fmt(m.body?.payload ?? 0, 'mass')}</span>
+          </div>
+        )}
+        {crane && m.crane && (
+          <div className={s.tool}>
+            <div className={s.toolHead}>
+              <Anchor size={14} /> Load & safety systems
+            </div>
+            <div className={s.small}>
+              Hook load: {m.crane.hookLoad ? `${m.crane.hookLoad} kg ${crane.loadSuspended ? '(suspended)' : '(on the ground)'}` : 'none rigged'} · hook height {crane.hookHeight.toFixed(2)} m
+            </div>
+            <div className={s.ctlRow}>
+              {[250, 500, 1000, 1500, 2000].map((kg) => (
+                <Button key={kg} size="sm" active={m.crane!.hookLoad === kg} disabled={crane.hookHeight > 0.1 || crane.loadSuspended} onClick={() => m.setHookLoad(kg)} title="Rig the load – hook must be on the ground">
+                  {kg} kg
+                </Button>
+              ))}
+              <Button size="sm" disabled={crane.loadSuspended || !m.crane.hookLoad} onClick={() => m.setHookLoad(0)}>
+                Unhook
+              </Button>
+            </div>
+            <div className={s.small}>Load moment {Math.round(crane.momentFraction * 100)} % of {(crane.capacity / 1000).toFixed(1)} kN·m {crane.outriggerSet ? '' : '(stabilizer NOT set – capacity halved)'}</div>
+            <Meter value={Math.min(1, crane.momentFraction)} color={crane.momentFraction > 0.9 ? 'var(--danger)' : crane.momentFraction > 0.75 ? 'var(--warn)' : 'var(--ok)'} />
+            <div className={s.ctlRow}>
+              <Badge tone={crane.outriggerSet ? 'ok' : 'warn'}>Stabilizer {crane.outriggerSet ? 'SET' : 'not set'}</Badge>
+              <Badge tone={crane.lmiCutout ? 'danger' : 'ok'}>LMI {crane.lmiCutout ? 'CUT-OUT' : 'OK'}</Badge>
+              <Badge tone={crane.a2b ? 'danger' : 'ok'}>A2B {crane.a2b ? 'ACTIVE' : 'OK'}</Badge>
+            </div>
+          </div>
+        )}
         <div className={s.ctlRow}>
           {c.emergencyStop ? (
             <Button onClick={() => m.setEmergencyStop(false)}>

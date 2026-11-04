@@ -12,7 +12,7 @@ export function SafetyStatus() {
     ['Wheels chocked', m.safety.wheelsChocked],
     ['Engine stopped', !m.controls.engineRunning],
     ['PTO switched off', !m.controls.ptoSwitch && m.pto.state === 'disengaged'],
-    ['Body lowered or propped', m.bodyAngle() < 0.5 || m.safety.bodyPropInstalled],
+    [m.securedLabel(), m.loadsSecured()],
     ['Lockout/tagout applied', m.safety.lotoApplied],
     [`Circuit at zero pressure (max ${(m.maxSystemPressure() / BAR).toFixed(1)} bar)`, m.isDepressurised()],
   ];

@@ -30,7 +30,7 @@ export interface ConfirmedFailure {
 }
 
 /** Events that represent unsafe technician actions. */
-export const SAFETY_VIOLATION_CODES = ['opened-under-pressure', 'unsupported-load', 'start-pto-on', 'gauge-overrange', 'unsafe-leak-check', 'skipped-loto', 'unsafe-adjust'];
+export const SAFETY_VIOLATION_CODES = ['unstable-lift', 'opened-under-pressure', 'unsupported-load', 'start-pto-on', 'gauge-overrange', 'unsafe-leak-check', 'skipped-loto', 'unsafe-adjust'];
 
 export function createScenarioMachine(def: MachineDefinition, s: DiagnosticScenario, seed?: number): MachineSimulation {
   const { brief, key } = s;
@@ -57,6 +57,7 @@ export function createScenarioMachine(def: MachineDefinition, s: DiagnosticScena
       ambient: brief.conditions.ambient,
       initialTemperature: brief.conditions.initialTemperature,
       payload: brief.conditions.payload,
+      hookLoad: brief.conditions.hookLoad,
       faults: structuredClone(key.faults),
       fluid: {
         ...(key.setup?.fluid?.contamination !== undefined ? { contamination: key.setup.fluid.contamination } : {}),
@@ -152,7 +153,7 @@ export class DiagnosticSession {
   }
 
   verification(): CriterionResult[] {
-    return evaluateCriteria(this.brief.verification, this.tracker.results);
+    return evaluateCriteria(this.brief.verification, this.tracker.results, this.machine.def.functions);
   }
 
   testsPerformed(): Set<string> {

@@ -30,4 +30,7 @@ Status legend: Not started · In progress · Implemented · Tested (automated te
 | Learning | 6-level curriculum, 18 lessons, quizzes, progression gating, fundamentals labs | Implemented |
 | Assessment | Requirements, practical exam pools, competency profile, weak areas, completion records with disclaimer | Implemented |
 | Records | History, performance report, CSV/JSON export | Implemented |
-| Expansion | Additional equipment (service truck, roll-off, crane, excavator, loader, skid steer, HPU) | Not started – template registry is in place; all would reuse the engine |
+| Expansion | Equipment Package 002 – service truck with telescopic crane (stabilizer, rotation, lift, extend, winch; counterbalance & lock valves; LMI; anti-two-block) on the same engine and component library | Tested + Verified (e2e) |
+| Expansion | Crane scenarios (7), profile, parts, inspection points, assemblies, lesson | Tested |
+| Visualization | Detailed shared truck chassis/cab, refined dump body, service body and crane models, richer workshop bay | Verified (screenshots, e2e) |
+| Expansion | Roll-off, excavator, loader, skid steer, HPU | Not started – add a template (definition + inspection + 3D model) reusing the engine |

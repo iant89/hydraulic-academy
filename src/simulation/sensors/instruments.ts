@@ -158,13 +158,19 @@ export function readSightGlass(m: MachineSimulation, reservoirId = 'tank') {
 /** Rate of change of hoist extension in mm/min (negative = settling). */
 export class DriftMeter {
   private start: { t: number; x: number } | null = null;
-  begin(m: MachineSimulation, cylinder: string) {
-    this.start = { t: m.time, x: m.sim.readout(cylinder, 'position') };
+  private pos(m: MachineSimulation, id: string) {
+    const c = m.sim.components.get(id);
+    if (!c) return 0;
+    return c.type === 'motor' ? (c.getState().angle ?? 0) / 1000 : m.sim.readout(id, 'position');
   }
-  read(m: MachineSimulation, cylinder: string) {
+  /** Cylinders: mm; motors: degrees of shaft rotation (reported in the same fields). */
+  begin(m: MachineSimulation, actuator: string) {
+    this.start = { t: m.time, x: this.pos(m, actuator) };
+  }
+  read(m: MachineSimulation, actuator: string) {
     if (!this.start) return null;
     const dt = m.time - this.start.t;
-    const dx = m.sim.readout(cylinder, 'position') - this.start.x;
+    const dx = this.pos(m, actuator) - this.start.x;
     return { elapsed: dt, displacementMm: dx * 1000, rateMmPerMin: dt > 0 ? (dx * 1000 * 60) / dt : 0 };
   }
 }

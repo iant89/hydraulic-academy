@@ -3,7 +3,7 @@ import { Box, Network, Columns2, Droplets, Gauge as GaugeIcon, Eye, Layers } fro
 import { useWorkbay } from '@/stores/workbay';
 import { useTick } from '@/stores/simLoop';
 import { inspectionFor } from '@/equipment/registry';
-import { DumpTruck3D, type VizMode } from '@/visualization/equipment/DumpTruck3D';
+import { Equipment3D, type VizMode } from '@/visualization/equipment/Equipment3D';
 import { Schematic } from '@/visualization/schematics/Schematic';
 import { OperatorControls } from '@/components/equipment/OperatorControls';
 import { InstrumentsPanel } from '@/components/equipment/InstrumentsPanel';
@@ -36,7 +36,7 @@ export default function SimulatorPage() {
     return { component: tp.component, port: tp.port, text: `${g.testPoint} ${g.damaged ? 'DMG' : fmt(readGauge(m, g.testPoint, g.gauge).value, 'pressure')}` };
   });
   const schematic = <Schematic circuit={m.sim.def} sim={m.sim} tick={tick} mode={viz === 'pressure' ? 'pressure' : viz === 'flow' ? 'flow' : 'static'} testPoints={m.def.testPoints} readings={readings} ariaLabel="Live hydraulic schematic" />;
-  const three = <DumpTruck3D key={`${st.profile.id}-${m.circuit.connections.length}`} getMachine={getMachine} points={points} selectedPoint={point} onSelectPoint={setPoint} mode={viz} />;
+  const three = <Equipment3D key={`${st.profile.id}-${m.circuit.connections.length}`} getMachine={getMachine} points={points} selectedPoint={point} onSelectPoint={setPoint} mode={viz} />;
   return (
     <div className={p.page}>
       <div className={p.head}>

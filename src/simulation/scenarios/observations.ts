@@ -81,10 +81,12 @@ export function observe(m: MachineSimulation, t: InspectionTargets): Observation
       case 'dcv': {
         const cmd = sim.getInput(id, 'command');
         const spool = sim.readout(id, 'spool');
+        const fnId = m.functionForValve(id)?.id;
+        const requested = fnId ? m.command(fnId) : 0;
         if (cmd !== 0) {
           if (Math.abs(spool - cmd) > 0.5) add({ id: `${id}-nomove`, sense: 'sound', level: 2, text: 'Solenoid clicks/buzzes when the control is operated, but the function does not respond.' });
           else add({ id: `${id}-click`, sense: 'sound', level: 0, text: 'Solenoid clicks when the control is operated.' });
-        } else if (m.controls.hoist !== 0 && m.controls.ignition) {
+        } else if (requested !== 0 && m.controls.ignition && !(fnId && m.inhibited[fnId]?.includes(Math.sign(requested)))) {
           add({ id: `${id}-silent`, sense: 'sound', level: 2, text: 'No solenoid click at the valve when the control is operated.' });
         }
         break;
@@ -97,9 +99,21 @@ export function observe(m: MachineSimulation, t: InspectionTargets): Observation
         if (bypass > 0.05 * LPM) add({ id: `${id}-breather`, sense: 'sight', level: 2, text: 'Oil mist and drips discharging from the cylinder breather/vent.' });
         if (rod > 0.02 * LPM) add({ id: `${id}-gland`, sense: 'sight', level: 2, text: 'Oil film running down the extended stage; drips from the gland.' });
         if ((sim.leakByElement[`${id}:rodseal`] ?? 0) > 0.3e-3 && rod <= 0.02 * LPM) add({ id: `${id}-gland-old`, sense: 'sight', level: 1, text: 'Dirt-caked oil residue around the gland.' });
-        if (m.controls.hoist === 0 && ext > 0.05 && v < -0.0002) add({ id: `${id}-drift`, sense: 'sight', level: 2, text: `Raised body is slowly settling with the control in HOLD (≈${Math.abs(v * 60000).toFixed(0)} mm/min).` });
+        if (!m.anyCommanded() && ext > 0.05 && v < -0.0002) add({ id: `${id}-drift`, sense: 'sight', level: 2, text: `${m.body ? 'Raised body is slowly settling with the control in HOLD' : `${c.label} is slowly retracting with all controls in neutral`} (≈${Math.abs(v * 60000).toFixed(0)} mm/min).` });
         if (Math.max(f.severity(id, 'cyl-binding'), f.severity(id, 'cyl-bent-rod')) > 0.2 && Math.abs(v) > 0.001) add({ id: `${id}-jerky`, sense: 'sight', level: 2, text: 'Movement is jerky/shuddering; creaking from mounts.' });
         if (f.severity(id, 'cyl-bent-rod') > 0.2 && ext > 0.2) add({ id: `${id}-bent`, sense: 'sight', level: 2, text: 'Visible run-out on an extended stage.' });
+        break;
+      }
+      case 'motor': {
+        const n = sim.readout(id, 'speed');
+        const fn = m.def.functions.find((f) => f.actuator === id);
+        if (fn && !m.anyCommanded() && Math.abs(n) > 0.5) add({ id: `${id}-creep`, sense: 'sight', level: 2, text: `${c.label} is turning slowly with the control in neutral (${n < 0 ? 'load paying out' : 'creeping'}).` });
+        if (fn && m.command(fn.id) !== 0 && Math.abs(n) > 5) add({ id: `${id}-run`, sense: 'sound', level: 0, text: `${c.label} running (${fn.label}).` });
+        break;
+      }
+      case 'counterbalance':
+      case 'pilot-check': {
+        if (sim.readout(id, 'opening') > 0.05 && !m.anyCommanded()) add({ id: `${id}-open`, sense: 'sound', level: 1, text: `Faint hiss at ${c.label} with the controls in neutral.` });
         break;
       }
       case 'reservoir': {

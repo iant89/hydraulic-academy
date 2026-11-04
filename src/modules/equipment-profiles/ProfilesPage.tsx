@@ -3,7 +3,7 @@ import { Copy, Download, FileUp, Factory, Trash2, Truck, Save, Plus } from 'luci
 import type { EquipmentProfile, ManufacturerDocument, SpecValue, VerificationStatus } from '@/equipment/shared/types';
 import { profilesRepo, specIssues } from '@/services/training/profiles';
 import { inspectionFor, machineFromProfile, TEMPLATES } from '@/equipment/registry';
-import { SCENARIO_BRIEFS } from '@/data/scenarios';
+import { SCENARIO_BRIEFS, SCENARIO_PROFILE } from '@/data/scenarios';
 import { useWorkbay } from '@/stores/workbay';
 import { usePrefs } from '@/stores/prefs';
 import { navigate } from '@/app/router';
@@ -248,7 +248,7 @@ function Docs({ pr }: { pr: EquipmentProfile }) {
 
 function TrainingInfo({ pr }: { pr: EquipmentProfile }) {
   const ips = inspectionFor(pr);
-  const sc = SCENARIO_BRIEFS.filter((b) => machineFromProfile(pr).id === 'generic-dt-15' && b.equipmentId);
+  const sc = SCENARIO_BRIEFS.filter((b) => SCENARIO_PROFILE[b.equipmentId] === pr.id);
   return (
     <div className={p.cols2}>
       <div>

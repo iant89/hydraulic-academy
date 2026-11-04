@@ -132,12 +132,18 @@ export function validateCircuit(c: CircuitDefinition): ValidationIssue[] {
           push({ severity: p.compType === 'relief-valve' ? 'warning' : 'error', code: 'supply-open', message: `${desc(p)} is not connected.`, why: 'The pressure inlet must be supplied.', consequence: p.compType === 'relief-valve' ? 'Relief valve provides no protection.' : 'Valve receives no flow.', fix: 'Connect to the pump pressure line.', ports: [p.ref] });
           break;
         }
-        if (!has(reach, ['pump-outlet']) && has(reach, ['tank', 'return-in', 'drain-in', 'suction-out'])) push({ severity: 'danger', code: 'supply-on-return', message: `${desc(p)} (pressure inlet) is connected to a return/tank line.`, why: 'P and T ports have been reversed.', consequence: p.compType === 'relief-valve' ? 'The relief valve now sits on the return line – the pump has NO overpressure protection.' : 'Spool functions are reversed and the relief path may be bypassed.', fix: 'Swap the hoses so pump pressure feeds the port marked P and the return goes from T.', ports: [p.ref], connections: conns });
+        // Series (tandem) valve banks: an upstream valve's T port legitimately feeds the next valve's P port.
+        const seriesFed = reach.some((x) => x.def.role === 'tank' && x.compType === 'dcv') && !has(reach, ['return-in', 'drain-in', 'suction-out']);
+        if (!seriesFed && !has(reach, ['pump-outlet']) && has(reach, ['tank', 'return-in', 'drain-in', 'suction-out'])) push({ severity: 'danger', code: 'supply-on-return', message: `${desc(p)} (pressure inlet) is connected to a return/tank line.`, why: 'P and T ports have been reversed.', consequence: p.compType === 'relief-valve' ? 'The relief valve now sits on the return line – the pump has NO overpressure protection.' : 'Spool functions are reversed and the relief path may be bypassed.', fix: 'Swap the hoses so pump pressure feeds the port marked P and the return goes from T.', ports: [p.ref], connections: conns });
         break;
       }
       case 'tank': {
         if (!connected) {
           push({ severity: p.compType === 'dcv' ? 'danger' : 'error', code: 'tank-open', message: `${desc(p)} is not connected.`, why: 'Return ports must have a free path to the reservoir.', consequence: p.compType === 'relief-valve' ? 'Relief cannot discharge – no protection.' : 'Return flow is blocked: actuators stall and pressure builds in the return.', fix: 'Connect to the return line through the filter to the reservoir.', ports: [p.ref] });
+          break;
+        }
+        if (p.compType === 'dcv' && reach.some((x) => x.def.role === 'supply' && x.compType === 'dcv') && !has(reach, ['pump-outlet'])) {
+          push({ severity: 'info', code: 'series-valve', message: `${desc(p)} carries over to the next valve section (series/tandem circuit).`, why: 'In a series bank each section’s return feeds the next section’s pressure inlet.', consequence: 'Downstream functions add their pressure to upstream ones; all flow passes every section.', fix: 'Correct for a series bank – verify against the schematic.', ports: [p.ref] });
           break;
         }
         if (has(reach, ['pump-outlet'])) push({ severity: 'danger', code: 'tank-pressurised', message: `${desc(p)} (tank) is connected to pump pressure.`, why: 'T ports and return passages are often rated for low pressure only.', consequence: 'Body or seal failure; reversed function.', fix: 'Connect pump pressure to P and route T to the reservoir.', ports: [p.ref], connections: conns });

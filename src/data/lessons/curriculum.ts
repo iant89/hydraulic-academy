@@ -146,6 +146,20 @@ export const LESSONS: Lesson[] = [
     quiz: [{ q: 'The PTO will not engage with the engine at 1500 rpm. Likely reason…', options: ['Broken pump', 'Engagement interlock – engage at idle', 'Low fluid', 'Relief stuck open'], answer: 1, why: 'Many PTOs (and the training truck) only allow engagement at low engine speed.' }],
   },
   {
+    id: 'l4-crane', level: 4, title: 'Operating a service-truck crane', minutes: 30,
+    objectives: ['Set up the crane safely (stabilizer, rigging)', 'Explain counterbalance valves and why crane valve sections vent A and B to tank in neutral', 'Interpret load-moment limiter and anti-two-block cut-outs'],
+    sections: [
+      { heading: 'Set-up', body: ['Park on firm level ground, set the parking brake, engage the PTO at idle. Lower the stabilizer until it carries its share of the truck’s weight BEFORE lifting – without it the rated capacity is reduced (halved in the training crane) and the truck can tip.', 'Rig the load only with the hook at the ground. Never stand under the boom or a suspended load.'] },
+      { heading: 'Load-holding valves', body: ['Counterbalance valves on the boom-lift, extend and winch circuits hold the load when the control is released and meter its lowering. They open only when load pressure plus pilot pressure × pilot ratio reaches their setting.', 'Valve sections used with counterbalance valves have their A and B ports open to tank in neutral (“motor spool”). If a section with blocked work ports is fitted, the pilot line can stay pressurised and the load may creep or lower unexpectedly.'], callout: { tone: 'warn', text: 'A crane valve section can look identical to a tandem-centre section. Check the spool type against the manufacturer parts list before fitting.' } },
+      { heading: 'Safety systems', body: ['The load-moment limiter compares load × radius with the rated moment. At the limit it cuts out boom down, boom extend and winch up – the motions that increase the moment – but still allows the motions that reduce it. The anti-two-block switch stops winch up and extend when the hook block reaches the boom tip.', 'A crane that stalls at a consistent pressure WITHOUT a load-moment alarm points to the hydraulics (relief setting, pump) rather than to the load.'] },
+    ],
+    activities: [{ label: 'Equipment Profiles → load the service crane', href: 'profiles' }, { label: 'Scenario: crane pre-use inspection', href: 'diagnostics' }],
+    quiz: [
+      { q: 'The load-moment alarm trips. Which motion is still allowed?', options: ['Boom extend', 'Winch up', 'Boom retract', 'Boom down'], answer: 2, why: 'Retracting reduces the radius and the moment.' },
+      { q: 'The boom drifts down with a load and no external leak. The cylinder seals were just replaced. Next suspect?', options: ['Pump', 'Boom-lift counterbalance valve', 'Return filter', 'Winch motor'], answer: 1, why: 'Leakage past the counterbalance seat lets the cylinder’s cap side bleed to tank through the open-to-tank valve section.' },
+    ],
+  },
+  {
     id: 'l4-inspection', level: 4, title: 'Equipment inspection', minutes: 20,
     objectives: ['Perform a structured inspection', 'Recognise evidence that only appears under pressure'],
     sections: [{ heading: 'Systematic inspection', body: ['Work zone by zone: engine/PTO/pump, hydraulic system, body/cylinder, controls. Check level with the body down, filter indicator, leaks (static and under pressure), breather discharge, noises, and mounting hardware.'] }],

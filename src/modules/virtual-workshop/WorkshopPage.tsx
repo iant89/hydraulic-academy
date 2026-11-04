@@ -3,9 +3,9 @@ import { ClipboardCheck, Hammer, Layers, ScanSearch } from 'lucide-react';
 import { useWorkbay } from '@/stores/workbay';
 import { useTick } from '@/stores/simLoop';
 import { useTraining } from '@/stores/training';
-import { inspectionFor } from '@/equipment/registry';
+import { assembliesFor, inspectionFor } from '@/equipment/registry';
 import { observe } from '@/simulation/scenarios/observations';
-import { DumpTruck3D } from '@/visualization/equipment/DumpTruck3D';
+import { Equipment3D } from '@/visualization/equipment/Equipment3D';
 import { WorkshopProps } from '@/visualization/equipment/WorkshopProps';
 import { Schematic } from '@/visualization/schematics/Schematic';
 import { InspectionPanel } from '@/components/equipment/InspectionPanel';
@@ -19,14 +19,6 @@ import p from '../shared/page.module.css';
 type Mode = 'inspect' | 'isolate' | 'tools';
 type Finding = { status: 'ok' | 'defect'; note: string };
 
-const ASSEMBLIES: { id: string; label: string; components: string[]; connections: string[] }[] = [
-  { id: 'pto-pump', label: 'PTO & pump assembly', components: ['pump'], connections: ['suction', 'pressure'] },
-  { id: 'valve', label: 'Valve assembly', components: ['dcv', 'relief'], connections: ['pressure', 'relief-supply', 'relief-return', 'return', 'work'] },
-  { id: 'reservoir', label: 'Reservoir & filtration', components: ['tank', 'filter', 'cooler'], connections: ['suction', 'return', 'relief-return', 'filter-out', 'cooler-out'] },
-  { id: 'cylinder', label: 'Hoist cylinder assembly', components: ['cyl'], connections: ['work'] },
-  { id: 'hoses', label: 'Hydraulic hose network', components: ['tank', 'pump', 'dcv', 'relief', 'cyl', 'filter', 'cooler'], connections: [] },
-];
-
 export default function WorkshopPage() {
   useTick();
   const st = useWorkbay();
@@ -38,7 +30,7 @@ export default function WorkshopPage() {
     <div className={p.page}>
       <div className={p.head}>
         <div className={p.grow}>
-          <h1>Virtual Workshop – Bay 1</h1>
+          <h1>Virtual Workshop – Bay 1 · {st.profile.name}</h1>
           <p>Inspect the equipment systematically, isolate assemblies for close examination, and use the workshop tools. Repairs are carried out in the Repair Workshop on this same equipment.</p>
         </div>
         <a href={href('repair')}>
@@ -50,9 +42,9 @@ export default function WorkshopPage() {
       <div className={p.split}>
         <div className={p.stack}>
           <div className={`${p.viewport}`} style={{ height: 480 }}>
-            <DumpTruck3D getMachine={() => useWorkbay.getState().machine} points={points} selectedPoint={point} onSelectPoint={setPoint} mode="normal" environment="workshop">
+            <Equipment3D getMachine={() => useWorkbay.getState().machine} points={points} selectedPoint={point} onSelectPoint={setPoint} mode="normal" environment="workshop">
               <WorkshopProps />
-            </DumpTruck3D>
+            </Equipment3D>
           </div>
           <Tabs<Mode>
             tabs={[
@@ -113,7 +105,8 @@ function InspectionMode({ point, setPoint }: { point: string | null; setPoint(id
       else if (f?.status === 'defect') incorrect.push(ip.label);
     }
     const safety: string[] = [];
-    if (m.bodyAngle() > 1 && !m.safety.bodyPropInstalled) safety.push('Inspected with the body raised and not propped.');
+    if (m.body && m.bodyAngle() > 1 && !m.safety.bodyPropInstalled) safety.push('Inspected with the body raised and not propped.');
+    if (m.crane && m.craneState()?.loadSuspended) safety.push('Inspected with a load suspended from the crane.');
     if (m.controls.engineRunning && !m.controls.parkingBrake) safety.push('Engine running without the parking brake set.');
     const inspected = Object.keys(findings).length;
     const score = Math.round(Math.max(0, (found.length * 2 + (inspected / points.length) * 4 - missed.length * 2 - incorrect.length - safety.length * 2) / (Math.max(1, found.length + missed.length) * 2 + 4)) * 100);
@@ -177,21 +170,24 @@ function InspectionMode({ point, setPoint }: { point: string | null; setPoint(id
 
 function Isolation() {
   const tick = useTick();
-  const m = useWorkbay((s) => s.machine);
-  const [asm, setAsm] = useState(ASSEMBLIES[0]!.id);
-  const a = ASSEMBLIES.find((x) => x.id === asm)!;
+  const { machine: m, profile } = useWorkbay();
+  const assemblies = assembliesFor(profile);
+  const [asm, setAsm] = useState(assemblies[0]?.id ?? '');
+  const a = assemblies.find((x) => x.id === asm) ?? assemblies[0]!;
   const sub = useMemo(() => {
     const def = m.sim.def;
-    const comps = def.components.filter((c) => a.components.includes(c.id) || a.id === 'hoses');
+    const all = a.components.length === 0;
+    const comps = def.components.filter((c) => all || a.components.includes(c.id));
     const ids = new Set(comps.map((c) => c.id));
     const conns = def.connections.filter((c) => (a.connections.length ? a.connections.includes(c.id) : true) && ids.has(c.from.component) && ids.has(c.to.component));
     return { ...def, name: a.label, components: comps, connections: conns };
   }, [m.sim.def, a]);
   const sim = m.sim;
+  const inAsm = sub.components;
   return (
     <Panel title="Component isolation" icon={<Layers size={14} />}>
       <div className={p.row} style={{ marginBottom: 8 }}>
-        {ASSEMBLIES.map((x) => (
+        {assemblies.map((x) => (
           <Button key={x.id} size="sm" active={asm === x.id} onClick={() => setAsm(x.id)}>
             {x.label}
           </Button>
@@ -202,16 +198,16 @@ function Isolation() {
           <Schematic circuit={sub} sim={sim} tick={tick} />
         </div>
         <div className={p.list}>
-          {a.id === 'pto-pump' && (
+          {inAsm.some((c) => c.id === m.def.pump) && (
             <>
               <PtoCutaway engaged={m.pto.state === 'engaged'} rpm={m.pto.outputRpm} />
-              {sim.components.has('pump') && <GearPumpCutaway rpm={sim.getInput('pump', 'speed')} cavitating={sim.readout('pump', 'cavitating') === 1} />}
+              <GearPumpCutaway rpm={sim.getInput(m.def.pump, 'speed')} cavitating={sim.readout(m.def.pump, 'cavitating') === 1} />
             </>
           )}
-          {a.id === 'valve' && sim.components.has('dcv') && <SpoolValveCutaway spool={sim.readout('dcv', 'spool')} />}
-          {a.id === 'valve' && sim.components.has('relief') && <ReliefCutaway opening={sim.readout('relief', 'opening')} pressure={sim.readout('relief', 'inlet')} setting={m.effectiveSetting('relief')} />}
-          {a.id === 'cylinder' && sim.components.has('cyl') && <CylinderCutaway extension={sim.readout('cyl', 'extension')} stages={3} single pressure={sim.pressureAt('cyl', 'A')} />}
-          {(a.id === 'reservoir' || a.id === 'hoses') && <div className={p.small}>Trace each line from port to port. Lines are identified by port markings and the schematic – never by hose colour.</div>}
+          {inAsm.filter((c) => c.type === 'dcv').slice(0, 2).map((c) => <SpoolValveCutaway key={c.id} spool={sim.readout(c.id, 'spool')} four={String(c.params.variant).startsWith('4')} />)}
+          {inAsm.filter((c) => c.type === 'relief-valve').map((c) => <ReliefCutaway key={c.id} opening={sim.readout(c.id, 'opening')} pressure={sim.readout(c.id, 'inlet')} setting={m.effectiveSetting(c.id)} />)}
+          {a.components.length > 0 && inAsm.filter((c) => c.type === 'cylinder').map((c) => <CylinderCutaway key={c.id} extension={sim.readout(c.id, 'extension')} stages={Array.isArray(c.params.stages) ? (c.params.stages as number[]).length : 1} single={c.params.singleActing === true} pressure={sim.pressureAt(c.id, 'A')} />)}
+          {a.components.length === 0 && <div className={p.small}>Trace each line from port to port. Lines are identified by port markings and the schematic – never by hose colour.</div>}
           {a.components.map((id) => {
             const c = m.circuit.components.find((x) => x.id === id);
             return c ? (

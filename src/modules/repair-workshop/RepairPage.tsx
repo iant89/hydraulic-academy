@@ -33,6 +33,7 @@ export default function RepairPage({ route }: { route: Route }) {
 
 function proceduresFor(m: ReturnType<typeof useWorkbay.getState>['machine']): { group: string; procs: () => Procedure[]; label: string; key: string }[] {
   const out: { group: string; procs: () => Procedure[]; label: string; key: string }[] = [];
+  const crane = m.crane !== null;
   const comps = [...m.circuit.components.filter((c) => c.type !== 'open-port' && c.type !== 'flow-meter'), ...m.removed.values()];
   for (const c of comps) {
     out.push({
@@ -41,16 +42,16 @@ function proceduresFor(m: ReturnType<typeof useWorkbay.getState>['machine']): { 
       label: c.label,
       procs: () => [
         replacementProcedure(m, c.id),
-        ...(c.type === 'filter' ? [simpleProcedure('filter', c.id, c.label)] : []),
-        ...(c.type === 'dcv' ? [simpleProcedure('spool', c.id, c.label)] : []),
-        ...(c.type === 'cooler' ? [simpleProcedure('cooler', c.id, c.label)] : []),
+        ...(c.type === 'filter' ? [simpleProcedure('filter', c.id, c.label, crane)] : []),
+        ...(c.type === 'dcv' ? [simpleProcedure('spool', c.id, c.label, crane)] : []),
+        ...(c.type === 'cooler' ? [simpleProcedure('cooler', c.id, c.label, crane)] : []),
       ],
     });
   }
-  for (const c of m.circuit.connections.filter((x) => !x.id.startsWith('ft-'))) out.push({ group: 'Hoses & fittings', key: `connection:${c.id}`, label: c.label ?? c.id, procs: () => [hoseProcedure(m, c.id), simpleProcedure('fitting', c.id, c.label ?? c.id)] });
-  for (const e of m.def.electrical) out.push({ group: 'Electrical', key: `electrical:${e.id}`, label: e.label, procs: () => [simpleProcedure('solenoid', e.id, e.label), simpleProcedure('wiring', e.id, `${e.label} wiring`)] });
-  out.push({ group: 'Drivetrain', key: 'pto:pto', label: m.def.pto.label, procs: () => [simpleProcedure('pto', 'pto', m.def.pto.label)] });
-  out.push({ group: 'Fluid', key: 'fluid:fluid', label: 'Hydraulic fluid', procs: () => [simpleProcedure('top-up', 'fluid', 'Reservoir'), simpleProcedure('flush', 'fluid', 'Complete system')] });
+  for (const c of m.circuit.connections.filter((x) => !x.id.startsWith('ft-'))) out.push({ group: 'Hoses & fittings', key: `connection:${c.id}`, label: c.label ?? c.id, procs: () => [hoseProcedure(m, c.id), simpleProcedure('fitting', c.id, c.label ?? c.id, crane)] });
+  for (const e of m.def.electrical) out.push({ group: 'Electrical', key: `electrical:${e.id}`, label: e.label, procs: () => [simpleProcedure('solenoid', e.id, e.label, crane), simpleProcedure('wiring', e.id, `${e.label} wiring`, crane)] });
+  out.push({ group: 'Drivetrain', key: 'pto:pto', label: m.def.pto.label, procs: () => [simpleProcedure('pto', 'pto', m.def.pto.label, crane)] });
+  out.push({ group: 'Fluid', key: 'fluid:fluid', label: 'Hydraulic fluid', procs: () => [simpleProcedure('top-up', 'fluid', 'Reservoir', crane), simpleProcedure('flush', 'fluid', 'Complete system', crane)] });
   return out;
 }
 

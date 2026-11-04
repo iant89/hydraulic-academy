@@ -24,11 +24,11 @@ export function ValveAdjustment() {
   const [locknut, setLocknut] = useState(true);
   const tp1 = st.gauges.find((g) => g.testPoint === 'TP1');
   const reading = tp1 ? readGauge(m, 'TP1', tp1.gauge) : null;
-  const atEnd = m.cylinderExtension() > 0.99 && m.controls.hoist === 1;
+  const atEnd = m.anyCommanded() && m.sim.readout(relief, 'open') === 1;
 
   const turn = (turns: number) => {
     if (locknut) return;
-    if (m.controls.hoist !== 0) {
+    if (m.anyCommanded()) {
       m.log('alarm', relief, 'unsafe-adjust', 'Adjust only with the control in neutral – never while dead-heading the pump.');
       return;
     }

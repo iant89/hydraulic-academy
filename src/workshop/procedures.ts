@@ -78,9 +78,9 @@ export interface Procedure {
 
 const PRE_TEXT: Record<Precondition, string> = {
   parked: 'Parking brake set and wheels chocked',
-  'body-lowered': 'Dump body fully lowered',
+  'body-lowered': 'Gravity loads secured (body down / boom stowed, load landed)',
   'body-propped': 'Body raised and supported by the body prop',
-  'body-secured': 'Body fully lowered or mechanically propped',
+  'body-secured': 'Gravity loads secured (body lowered or propped / boom stowed, load landed)',
   'engine-off': 'Engine stopped, PTO switched off',
   loto: 'Lockout/tagout applied',
   depressurised: 'Circuit verified at zero pressure',
@@ -97,14 +97,16 @@ export function preconditionText(p: Precondition) {
   return PRE_TEXT[p];
 }
 
-function commonIsolation(bodyReq: 'lowered' | 'propped'): ProcedureStep[] {
+function commonIsolation(bodyReq: 'lowered' | 'propped', crane = false): ProcedureStep[] {
   return [
     { id: 'park', title: 'Position and secure the equipment', instruction: 'Park on level ground, set the parking brake and chock the wheels.', op: 'park', requires: [] },
-    bodyReq === 'lowered'
-      ? { id: 'body', title: 'Lower the dump body', instruction: 'Lower the body fully onto the frame so no load is held by trapped oil.', op: 'lower-body', requires: ['parked'], safety: 'Never rely on the hydraulic system to hold a raised body during service.' }
-      : { id: 'body', title: 'Raise and prop the body', instruction: 'Raise the empty body and install the body prop so the body is mechanically supported.', op: 'raise-and-prop', requires: ['parked'], safety: 'Install the body prop before any work at or under the body.' },
+    crane
+      ? { id: 'body', title: 'Land the load and stow the boom', instruction: 'Lower any load to the ground and unhook it, retract the boom and lower it into its rest so no load is held by counterbalance valves.', op: 'lower-body', requires: ['parked'], safety: 'Never open a crane circuit while the boom or a load is held by trapped oil.' }
+      : bodyReq === 'lowered'
+        ? { id: 'body', title: 'Lower the dump body', instruction: 'Lower the body fully onto the frame so no load is held by trapped oil.', op: 'lower-body', requires: ['parked'], safety: 'Never rely on the hydraulic system to hold a raised body during service.' }
+        : { id: 'body', title: 'Raise and prop the body', instruction: 'Raise the empty body and install the body prop so the body is mechanically supported.', op: 'raise-and-prop', requires: ['parked'], safety: 'Install the body prop before any work at or under the body.' },
     { id: 'shutdown', title: 'Shut down engine and PTO', instruction: 'Switch the PTO OFF, return controls to neutral, stop the engine.', op: 'shutdown', requires: ['parked', 'body-secured'] },
-    { id: 'relieve', title: 'Relieve stored hydraulic energy', instruction: 'Key ON / engine OFF: cycle the hoist control to LOWER and back to neutral to vent trapped pressure, then key OFF.', op: 'relieve-pressure', requires: ['engine-off', 'body-secured'], safety: 'Trapped pressure remains after shutdown. Accumulators (if fitted) must be bled per the manufacturer procedure.' },
+    { id: 'relieve', title: 'Relieve stored hydraulic energy', instruction: crane ? 'Key ON / engine OFF: cycle every control lever both ways, then open the manual bleed on each load-holding valve (loads already secured), then key OFF.' : 'Key ON / engine OFF: cycle the hoist control to LOWER and back to neutral to vent trapped pressure, then key OFF.', op: 'relieve-pressure', requires: ['engine-off', 'body-secured'], safety: 'Trapped pressure remains after shutdown. Accumulators (if fitted) must be bled per the manufacturer procedure.' },
     { id: 'loto', title: 'Apply lockout/tagout', instruction: 'Remove the key, lock the ignition/battery isolator and attach your personal tag.', op: 'loto', requires: ['engine-off'] },
     { id: 'zero', title: 'Verify zero pressure', instruction: 'Install a gauge at the test points and confirm 0 bar before opening any line.', op: 'verify-zero', requires: ['loto'], safety: 'Treat every line as pressurised until a gauge proves otherwise.' },
   ];
@@ -119,7 +121,8 @@ const restoreSteps = (): ProcedureStep[] => [
 export function replacementProcedure(m: MachineSimulation, componentId: string): Procedure {
   const comp = m.circuit.components.find((c) => c.id === componentId) ?? m.removed.get(componentId);
   const label = comp?.label ?? componentId;
-  const bodyReq = comp?.type === 'cylinder' ? 'propped' : 'lowered';
+  const isCrane = m.crane !== null;
+  const bodyReq = comp?.type === 'cylinder' && !isCrane ? 'propped' : 'lowered';
   return {
     id: `replace:${componentId}`,
     title: `Replace ${label}`,
@@ -128,7 +131,7 @@ export function replacementProcedure(m: MachineSimulation, componentId: string):
     documentNote: 'Generic training procedure. For real equipment follow the manufacturer service manual for this model and serial range.',
     steps: [
       { id: 'identify', title: `Identify the ${label}`, instruction: 'Confirm the component against the schematic and its data plate. Review this procedure and the specifications (with their source status).', op: 'review', requires: [] },
-      ...commonIsolation(bodyReq),
+      ...commonIsolation(bodyReq, isCrane),
       { id: 'tag', title: 'Identify and tag hydraulic connections', instruction: 'Tag each line with the port marking it connects to, before disconnecting anything.', op: 'tag-lines', requires: ['depressurised'] },
       { id: 'disconnect', title: 'Disconnect and cap lines', instruction: 'Disconnect each line, catch fluid, and immediately cap and plug both the hose and the port.', op: 'disconnect-lines', requires: ['depressurised'], safety: 'Crack fittings slowly with a rag over them – stop if fluid sprays.' },
       { id: 'hardware', title: 'Remove mounting hardware', instruction: comp?.type === 'cylinder' ? 'Support the cylinder with a hoist; remove the top pin and base trunnion caps.' : 'Support the component; remove the mounting bolts.', op: 'remove-hardware', requires: ['lines-disconnected'] },
@@ -155,7 +158,7 @@ export function hoseProcedure(m: MachineSimulation, connectionId: string): Proce
     documentNote: 'Use hose of the specified size, construction and working pressure rating.',
     steps: [
       { id: 'identify', title: 'Identify the hose', instruction: 'Confirm both ends and port markings; check the layline for size and rating.', op: 'review', requires: [] },
-      ...commonIsolation(c?.to.component === 'cyl' || c?.from.component === 'cyl' ? 'lowered' : 'lowered'),
+      ...commonIsolation('lowered', m.crane !== null),
       { id: 'tag', title: 'Tag the line ends', instruction: 'Tag both ends with their port markings.', op: 'tag-lines', requires: ['depressurised'] },
       { id: 'disconnect', title: 'Disconnect and cap', instruction: 'Disconnect both ends and cap the ports.', op: 'disconnect-lines', requires: ['depressurised'] },
       { id: 'replace', title: 'Fit the new hose assembly', instruction: 'Select a hose with matching ID, construction and adequate working pressure.', op: 'replace-hose', requires: ['lines-disconnected'] },
@@ -166,13 +169,13 @@ export function hoseProcedure(m: MachineSimulation, connectionId: string): Proce
   };
 }
 
-export function simpleProcedure(kind: 'fitting' | 'filter' | 'solenoid' | 'wiring' | 'pto' | 'spool' | 'cooler' | 'top-up' | 'flush', id: string, label: string): Procedure {
+export function simpleProcedure(kind: 'fitting' | 'filter' | 'solenoid' | 'wiring' | 'pto' | 'spool' | 'cooler' | 'top-up' | 'flush', id: string, label: string, crane = false): Procedure {
   const op: Record<typeof kind, StepOp> = { fitting: 'tighten', filter: 'replace-element', solenoid: 'replace-solenoid', wiring: 'repair-wiring', pto: 'repair-pto', spool: 'free-spool', cooler: 'clean-cooler', 'top-up': 'top-up', flush: 'flush' };
   const titles: Record<typeof kind, string> = { fitting: 'Re-torque fitting', filter: 'Replace filter element', solenoid: 'Replace solenoid coil', wiring: 'Repair wiring / connector', pto: 'Repair PTO', spool: 'Clean and free valve spool', cooler: 'Clean cooler core', 'top-up': 'Top up hydraulic fluid', flush: 'Drain, flush and refill fluid' };
   const targetKind = kind === 'fitting' ? 'connection' : kind === 'solenoid' || kind === 'wiring' ? 'electrical' : kind === 'pto' ? 'pto' : kind === 'top-up' || kind === 'flush' ? 'fluid' : 'component';
   const steps: ProcedureStep[] = [
     { id: 'identify', title: `Identify: ${label}`, instruction: 'Confirm the item and review the procedure.', op: 'review', requires: [] },
-    ...commonIsolation('lowered'),
+    ...commonIsolation('lowered', crane),
     { id: 'work', title: titles[kind], instruction: `${titles[kind]} – ${label}.`, op: op[kind], requires: ['depressurised'] },
     { id: 'restore', title: 'Restore the equipment', instruction: 'Check fluid level, remove lockout/tagout.', op: 'restore', requires: ['loto'] },
     { id: 'bleed', title: 'Prime and bleed', instruction: 'Start at idle and cycle the function.', op: 'bleed', requires: ['no-loto'], optional: true },
@@ -229,11 +232,11 @@ export class WorkshopJob {
       case 'parked':
         return m.controls.parkingBrake && m.safety.wheelsChocked;
       case 'body-lowered':
-        return m.bodyAngle() < 0.5;
+        return m.loadsSecured();
       case 'body-propped':
         return m.safety.bodyPropInstalled;
       case 'body-secured':
-        return m.bodyAngle() < 0.5 || m.safety.bodyPropInstalled;
+        return m.loadsSecured();
       case 'engine-off':
         return !m.controls.engineRunning && !m.controls.ptoSwitch;
       case 'loto':
@@ -282,15 +285,8 @@ export class WorkshopJob {
         m.safety.wheelsChocked = true;
         return this.finish(step, { ok: true, message: 'Parking brake set, wheels chocked.' });
       case 'lower-body': {
-        const wasRunning = m.controls.engineRunning;
-        m.setIgnition(true);
-        if (wasRunning) m.controls.engineRunning = true;
-        m.safety.bodyPropInstalled = false;
-        m.setHoist(-1);
-        for (let i = 0; i < 120 && m.cylinderExtension() > 0.002; i++) m.advance(0.5);
-        m.setHoist(0);
-        m.advance(0.5);
-        return this.finish(step, { ok: m.bodyAngle() < 0.5, message: m.bodyAngle() < 0.5 ? 'Body lowered fully onto the frame.' : 'Body did not lower fully.' });
+        const msg = m.secureLoads();
+        return this.finish(step, { ok: m.loadsSecured(), message: msg });
       }
       case 'raise-and-prop': {
         if (m.body) m.body.payload = 0;
@@ -309,22 +305,14 @@ export class WorkshopJob {
         return this.finish(step, { ok: true, message: `Body raised to ${m.bodyAngle().toFixed(0)}° and prop installed. Load now carried by the prop.` });
       }
       case 'shutdown':
-        m.setHoist(0);
+        m.neutralAll();
         m.setPtoSwitch(false);
         m.stopEngine();
         m.setIgnition(false);
         m.advance(2);
         return this.finish(step, { ok: true, message: 'Controls neutral, PTO off, engine stopped.' });
-      case 'relieve-pressure': {
-        m.setIgnition(true);
-        m.setHoist(-1);
-        m.advance(3);
-        m.setHoist(0);
-        m.setIgnition(false);
-        m.advance(1);
-        const p = m.maxSystemPressure();
-        return this.finish(step, { ok: true, message: `Control cycled. Highest remaining pressure ${(p / BAR).toFixed(1)} bar.` });
-      }
+      case 'relieve-pressure':
+        return this.finish(step, { ok: true, message: m.relieveStoredPressure() });
       case 'loto':
         m.setIgnition(false);
         m.safety.lotoApplied = true;
