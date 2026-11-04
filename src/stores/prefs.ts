@@ -9,6 +9,8 @@ interface PrefsState {
   reducedMotion: boolean;
   defaultMode: TrainingMode;
   showHints: boolean;
+  /** Authorised profile editing (instructor / administrator). */
+  editorEnabled: boolean;
   set(p: Partial<Omit<PrefsState, 'set'>>): void;
 }
 
@@ -20,10 +22,11 @@ export const usePrefs = create<PrefsState>((set) => ({
   reducedMotion: false,
   defaultMode: 'practical',
   showHints: true,
+  editorEnabled: false,
   ...saved,
   set(p) {
     set(p);
-    const { units, technician, reducedMotion, defaultMode, showHints } = { ...usePrefs.getState(), ...p };
-    prefsStorage.write('prefs', { units, technician, reducedMotion, defaultMode, showHints });
+    const { units, technician, reducedMotion, defaultMode, showHints, editorEnabled } = { ...usePrefs.getState(), ...p };
+    prefsStorage.write('prefs', { units, technician, reducedMotion, defaultMode, showHints, editorEnabled });
   },
 }));

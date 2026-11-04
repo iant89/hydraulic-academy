@@ -1,12 +1,8 @@
-import { Html } from '@react-three/drei';
+import { TextSprite } from '../three/TextSprite';
 
 /** Static workshop bay furniture (visual only). */
 export function WorkshopProps() {
-  const label = (text: string) => (
-    <Html center distanceFactor={12} style={{ pointerEvents: 'none' }}>
-      <div style={{ background: 'rgba(17,19,22,0.85)', color: '#b6bdc5', fontSize: 11, padding: '1px 6px', borderRadius: 3, whiteSpace: 'nowrap', fontFamily: 'system-ui' }}>{text}</div>
-    </Html>
-  );
+  const label = (text: string) => <TextSprite text={text} position={[0, 0, 0]} color="#b6bdc5" scale={0.36} />;
   return (
     <group>
       {/* back wall */}

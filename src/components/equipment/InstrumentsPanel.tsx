@@ -58,7 +58,7 @@ export function InstrumentsPanel({ compact }: { compact?: boolean }) {
   return (
     <Panel title="Diagnostic instruments" icon={<Activity size={14} />}>
       <div style={{ display: 'grid', gridTemplateColumns: compact ? '1fr' : 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
-        <div className={s.tool}>
+        <div className={s.tool} role="group" aria-label="Pressure gauges">
           <div className={s.toolHead}>
             <GaugeIcon size={15} /> Pressure gauges
           </div>
@@ -91,7 +91,7 @@ export function InstrumentsPanel({ compact }: { compact?: boolean }) {
           )}
         </div>
 
-        <div className={s.tool}>
+        <div className={s.tool} role="group" aria-label="In-line flow tester">
           <div className={s.toolHead}>
             <Droplet size={15} /> In-line flow tester
             {ft && <Badge tone="info">installed</Badge>}
@@ -132,7 +132,7 @@ export function InstrumentsPanel({ compact }: { compact?: boolean }) {
           )}
         </div>
 
-        <div className={s.tool}>
+        <div className={s.tool} role="group" aria-label="Photo tachometer">
           <div className={s.toolHead}>
             <Timer size={15} /> Photo tachometer
           </div>
@@ -145,7 +145,7 @@ export function InstrumentsPanel({ compact }: { compact?: boolean }) {
           </Button>
         </div>
 
-        <div className={s.tool}>
+        <div className={s.tool} role="group" aria-label="Multimeter">
           <div className={s.toolHead}>
             <Zap size={15} /> Multimeter
           </div>
@@ -164,7 +164,7 @@ export function InstrumentsPanel({ compact }: { compact?: boolean }) {
           )}
         </div>
 
-        <div className={s.tool}>
+        <div className={s.tool} role="group" aria-label="IR thermometer">
           <div className={s.toolHead}>
             <Thermometer size={15} /> IR thermometer
           </div>
@@ -175,7 +175,7 @@ export function InstrumentsPanel({ compact }: { compact?: boolean }) {
           </Button>
         </div>
 
-        <div className={s.tool}>
+        <div className={s.tool} role="group" aria-label="Reservoir sight glass">
           <div className={s.toolHead}>
             <Eye size={15} /> Reservoir sight glass
           </div>
@@ -186,7 +186,7 @@ export function InstrumentsPanel({ compact }: { compact?: boolean }) {
           </Button>
         </div>
 
-        <div className={s.tool}>
+        <div className={s.tool} role="group" aria-label="Fluid sample kit">
           <div className={s.toolHead}>
             <FlaskRound size={15} /> Fluid sample kit
           </div>
@@ -209,7 +209,7 @@ export function InstrumentsPanel({ compact }: { compact?: boolean }) {
           )}
         </div>
 
-        <div className={s.tool}>
+        <div className={s.tool} role="group" aria-label="Drift test">
           <div className={s.toolHead}>
             <Ruler size={15} /> Drift test (tape on stage)
           </div>

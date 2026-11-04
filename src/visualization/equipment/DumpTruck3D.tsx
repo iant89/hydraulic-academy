@@ -1,6 +1,7 @@
 import { useMemo, useRef, type ReactNode } from 'react';
 import { Canvas, useFrame, type ThreeEvent } from '@react-three/fiber';
-import { OrbitControls, Html } from '@react-three/drei';
+import { OrbitControls } from '@react-three/drei';
+import { TextSprite } from '../three/TextSprite';
 import * as THREE from 'three';
 import type { MachineSimulation } from '@/simulation/machine/machine';
 import type { InspectionPoint } from '@/equipment/shared/types';
@@ -346,11 +347,7 @@ function Truck({ getMachine, points, selectedPoint, onSelectPoint, mode, showHot
               <sphereGeometry args={[selectedPoint === ip.id ? 0.085 : 0.06, 14, 14]} />
               <meshStandardMaterial color={selectedPoint === ip.id ? '#f2a93b' : '#45b4d6'} emissive={selectedPoint === ip.id ? '#f2a93b' : '#45b4d6'} emissiveIntensity={0.9} transparent opacity={0.9} />
             </mesh>
-            {selectedPoint === ip.id && (
-              <Html distanceFactor={9} position={[0, 0.18, 0]} center style={{ pointerEvents: 'none' }}>
-                <div style={{ background: 'rgba(17,19,22,0.92)', border: '1px solid #f2a93b', color: '#e5e8eb', padding: '2px 8px', borderRadius: 4, fontSize: 12, whiteSpace: 'nowrap', fontFamily: 'system-ui' }}>{ip.label}</div>
-              </Html>
-            )}
+            {selectedPoint === ip.id && <TextSprite text={ip.label} position={[0, 0.25, 0]} border="#f2a93b" />}
           </group>
         ))}
     </group>

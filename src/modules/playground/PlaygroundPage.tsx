@@ -91,16 +91,21 @@ function Experiments({ onSaved }: { onSaved(): void }) {
     <div className={p.splitL}>
       <Panel title="Experiments">
         <div className={p.list}>
-          {EXPERIMENTS.map((x, i) => (
-            <button key={x.id} className={`${p.item} ${x.id === id ? p.itemActive : ''}`} onClick={() => { setId(x.id); setRecords([]); setReveal(false); }}>
-              <div className={p.itemTitle}>
-                <TestTubes size={13} /> {i + 1}. {x.title} {progress.completedExperiments.includes(x.id) && <Badge tone="ok">done</Badge>}
-              </div>
-            </button>
-          ))}
-          <button className={p.item} onClick={() => setId('__build')} style={{ borderStyle: 'dashed' }}>
-            <div className={p.itemTitle}>7. Basic hydraulic circuit construction → Free build / Circuit Builder</div>
-          </button>
+          {[...EXPERIMENTS.slice(0, 6), null, ...EXPERIMENTS.slice(6)].map((x, i) =>
+            x ? (
+              <button key={x.id} className={`${p.item} ${x.id === id ? p.itemActive : ''}`} onClick={() => { setId(x.id); setRecords([]); setReveal(false); }}>
+                <div className={p.itemTitle}>
+                  <TestTubes size={13} /> {i + 1}. {x.title} {progress.completedExperiments.includes(x.id) && <Badge tone="ok">done</Badge>}
+                </div>
+              </button>
+            ) : (
+              <button key="build" className={`${p.item} ${id === '__build' ? p.itemActive : ''}`} onClick={() => setId('__build')} style={{ borderStyle: 'dashed' }}>
+                <div className={p.itemTitle}>
+                  <TestTubes size={13} /> 7. Basic hydraulic circuit construction
+                </div>
+              </button>
+            ),
+          )}
         </div>
       </Panel>
       {id === '__build' ? (
